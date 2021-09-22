@@ -4,7 +4,6 @@ import (
 	"log"
 	"os"
 
-	"github.com/VikeLabs/gatekeeper/internal"
 	"github.com/diamondburned/arikawa/bot"
 )
 
@@ -16,9 +15,7 @@ func main() {
 		log.Fatalln("No $BOT_TOKEN given.")
 	}
 
-	commands := &internal.Bot{}
-
-	wait, err := bot.Start(token, commands, func(ctx *bot.Context) error {
+	wait, err := bot.Start(token, &struct{ Ctx *bot.Context }{}, func(ctx *bot.Context) error {
 		ctx.HasPrefix = bot.NewPrefix("!", "~")
 		ctx.EditableCommands = true
 
