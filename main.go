@@ -7,13 +7,10 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
-	"github.com/diamondburned/arikawa/v3/api"
 	"github.com/diamondburned/arikawa/v3/discord"
 	"github.com/diamondburned/arikawa/v3/gateway"
 	"github.com/diamondburned/arikawa/v3/state"
-	"github.com/diamondburned/arikawa/v3/utils/json/option"
 )
 
 // To run, do `APP_ID="APP ID" GUILD_ID="GUILD ID" BOT_TOKEN="TOKEN HERE" go run .`
@@ -33,67 +30,7 @@ func main() {
 		return
 	}
 
-	s.AddHandler(func(e *gateway.InteractionCreateEvent) {
-		switch e.Data.Type() {
-		case discord.CommandInteraction:
-			cmd := e.Data.(*discord.CommandInteractionData)
-			name := cmd.Name
-			options := cmd.Options
-
-			var data api.InteractionResponse
-			switch name {
-			case "ping":
-				latency := time.Since(e.ID.Time())
-				response := "Pong! `time=" + latency.String() + "`"
-
-				data = api.InteractionResponse{
-					Type: api.MessageInteractionWithSource,
-					Data: &api.InteractionResponseData{
-						Content: option.NewNullableString(response),
-						Flags:   api.EphemeralResponse,
-					},
-				}
-			case "echo":
-				var echoedMsg string
-				for _, v := range options {
-					if v.Name == "message" {
-						echoedMsg = v.String()
-					}
-				}
-				thisGuild, err := s.Guild(e.GuildID)
-				if err != nil {
-					log.Println("wtf! guild doesn't exist")
-					return
-				}
-
-				ownerID := thisGuild.OwnerID
-				senderID := e.Member.User.ID
-				if ownerID != senderID {
-					echoedMsg = "Sorry, only the server owner can use this command."
-				}
-
-				data = api.InteractionResponse{
-					Type: api.MessageInteractionWithSource,
-					Data: &api.InteractionResponseData{
-						Content: option.NewNullableString(echoedMsg),
-						Flags:   api.EphemeralResponse,
-					},
-				}
-			}
-
-			if err := s.RespondInteraction(e.ID, e.Token, data); err != nil {
-				log.Println("failed to send interaction callback:", err)
-			}
-
-		case discord.PingInteraction:
-			data := api.InteractionResponse{
-				Type: api.PongInteraction,
-			}
-			if err := s.RespondInteraction(e.ID, e.Token, data); err != nil {
-				log.Println("failed to send interaction callback:", err)
-			}
-		}
-	})
+	s.AddHandler(MakeCommandHandlers(s))
 
 	s.AddIntents(gateway.IntentGuilds)
 
@@ -118,105 +55,20 @@ func main() {
 		}
 	}
 
-	newCommands := []api.CreateCommandData{
-		{
-			Name:        "register",
-			Description: "Join the server by registering your email",
-			Type:        discord.ChatInputCommand,
-			Options: []discord.CommandOption{
-				{
-					Name:        "email",
-					Description: "The email that you'd like to register",
-					Type:        discord.StringOption,
-					Required:    true,
-				},
-			},
-		},
-		{
-			Name:        "verify",
-			Description: "Finalize registration by verifying your email",
-			Type:        discord.ChatInputCommand,
-			Options: []discord.CommandOption{
-				{
-					Name:        "token",
-					Description: "The that you recieved in your email",
-					Type:        discord.StringOption,
-					Required:    true,
-				},
-			},
-		},
-		{
-			Name:                "whois",
-			Description:         "Admin only: get the user's indentifier",
-			Type:                discord.ChatInputCommand,
-			NoDefaultPermission: true,
-			Options: []discord.CommandOption{
-				{
-					Name:        "user",
-					Description: "The user whos identifier will be given",
-					Type:        discord.UserOption,
-					Required:    true,
-				},
-			},
-		},
-		{
-			Name:                "setup",
-			Description:         "Initialize the bot with necessary info to run",
-			Type:                discord.ChatInputCommand,
-			NoDefaultPermission: true,
-			Options: []discord.CommandOption{
-				{
-					Name:        "domain",
-					Description: "A domain to be allowlisted",
-					Type:        discord.StringOption,
-					Required:    true,
-				},
-				{
-					Name:        "verified_role",
-					Description: "The role that will be assigned to verified users",
-					Type:        discord.RoleOption,
-					Required:    true,
-				},
-				{
-					Name:        "verification_channel",
-					Description: "The channel that verification will occur in",
-					Type:        discord.ChannelOption,
-					Required:    true,
-				},
-			},
-		},
-		{
-			Name:        "echo",
-			Description: "Just like Unix",
-			Type:        discord.ChatInputCommand,
-			Options: []discord.CommandOption{
-				{
-					Name:        "message",
-					Description: "Echo me!",
-					Type:        discord.StringOption,
-					Required:    true,
-				},
-			},
-		},
-	}
-
 	// track commands so we can delete them on cleanup
-	activeCommands := []*discord.Command{}
+	activeCommands := map[string]*discord.Command{}
 
-	for _, command := range newCommands {
+	for _, command := range CommandDefinitions {
 		newCmd, err := s.CreateGuildCommand(appID, guildID, command)
 		if err != nil {
 			log.Fatalln("failed to create guild command:", err)
 		}
-		activeCommands = append(activeCommands, newCmd)
+		activeCommands[command.Name] = newCmd
 
-		if command.NoDefaultPermission {
-			s.EditCommandPermissions(appID, guildID, newCmd.ID, []discord.CommandPermissions{
-				// {
-				// 	ID:
-				// }
-			})
-		}
+		// TODO still not sure what to do about initial admin permissions
+		// if command.NoDefaultPermission {
+		// 	s.EditCommandPermissions(appID, guildID, newCmd.ID, []discord.CommandPermissions{})
+		// }
 	}
 
 	wait := func() func() {
@@ -236,10 +88,10 @@ func main() {
 	fmt.Println("cleaning up")
 
 	// cleanup
-	for _, cmd := range activeCommands {
+	for name, cmd := range activeCommands {
 		err := s.DeleteGuildCommand(cmd.AppID, cmd.GuildID, cmd.ID)
 		if err != nil {
-			log.Println("couldn't delete command with id", cmd)
+			log.Println("couldn't delete command", name, "with id", cmd)
 		}
 	}
 
