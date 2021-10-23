@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"net/mail"
 	"strings"
 
 	"github.com/diamondburned/arikawa/v3/api"
@@ -14,10 +15,18 @@ var VerificationRole = discord.RoleID(mustSnowflakeEnv("VERIFIED_ROLE_ID"))
 var EmailDomain = mustEnv("EMAIL_DOMAIN")
 
 func Register(email string) (bool, error) {
-	if !strings.HasSuffix(email, "@"+EmailDomain) {
+	// check if valid address
+	address, err := mail.ParseAddress(email)
+	if err != nil {
 		return false, nil
 	}
 
+	// check if right domain and not alias email address
+	if  !strings.HasSuffix(address.Address, "@"+EmailDomain) && !strings.Contains("+", address.Address) {
+		return false, nil
+	}
+
+	// create token
 	b := make([]byte, 4)
 	rand.Read(b)
 	token := hex.EncodeToString(b)
