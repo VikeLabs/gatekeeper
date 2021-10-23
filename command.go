@@ -10,7 +10,7 @@ import (
 	"github.com/diamondburned/arikawa/v3/state"
 )
 
-var VerificationRole = discord.RoleID(mustSnowflakeEnv("VERIF_ROLE_ID"))
+var VerificationRole = discord.RoleID(mustSnowflakeEnv("VERIFIED_ROLE_ID"))
 var EmailDomain = mustEnv("EMAIL_DOMAIN")
 
 func Register(email string) (bool, error) {
