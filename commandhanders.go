@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"strings"
 	"time"
 
 	"github.com/diamondburned/arikawa/v3/api"
@@ -34,46 +35,6 @@ var CommandDefinitions = []api.CreateCommandData{
 				Name:        "token",
 				Description: "The that you recieved in your email",
 				Type:        discord.StringOption,
-				Required:    true,
-			},
-		},
-	},
-	{
-		Name:                "whois",
-		Description:         "Admin only: get the user's indentifier",
-		Type:                discord.ChatInputCommand,
-		NoDefaultPermission: true,
-		Options: []discord.CommandOption{
-			{
-				Name:        "user",
-				Description: "The user whos identifier will be given",
-				Type:        discord.UserOption,
-				Required:    true,
-			},
-		},
-	},
-	{
-		Name:                "setup",
-		Description:         "Initialize the bot with necessary info to run",
-		Type:                discord.ChatInputCommand,
-		NoDefaultPermission: true,
-		Options: []discord.CommandOption{
-			{
-				Name:        "domain",
-				Description: "A domain to be allowlisted",
-				Type:        discord.StringOption,
-				Required:    true,
-			},
-			{
-				Name:        "verified_role",
-				Description: "The role that will be assigned to verified users",
-				Type:        discord.RoleOption,
-				Required:    true,
-			},
-			{
-				Name:        "verification_channel",
-				Description: "The channel that verification will occur in",
-				Type:        discord.ChannelOption,
 				Required:    true,
 			},
 		},
@@ -114,6 +75,43 @@ var commandHandlerMap = map[string]CommandHandler{
 		}
 
 		log.Println("couldn't find 'message' param for command 'echo'")
+		return nil
+	},
+	"register": func(s *state.State, e *gateway.InteractionCreateEvent, options []discord.InteractionOption) *api.InteractionResponse {
+		for _, v := range options {
+			if v.Name == "email" {
+				valid, err := Register(strings.TrimSpace(v.String()))
+				if err != nil {
+					log.Println("registration error:", err)
+					return makeEphemeralResponse("Sorry, an error has occurred")
+				}
+				if !valid {
+					return makeEphemeralResponse("Invalid domain, the only supported emails are " + EmailDomain)
+				}
+				msg := "A email has been sent to " + v.String() + "\nPlease use /verify <token> to verify your email address."
+				return makeEphemeralResponse(msg)
+			}
+		}
+
+		log.Println("couldn't find 'email' param for command 'register'")
+		return nil
+	},
+	"verify": func(s *state.State, e *gateway.InteractionCreateEvent, options []discord.InteractionOption) *api.InteractionResponse {
+		for _, v := range options {
+			if v.Name == "token" {
+				if e.Member == nil {
+					return nil
+				}
+				msg, err := Verify(s, e.Member.User.ID, e.GuildID, strings.TrimSpace(v.String()))
+				if err != nil {
+					log.Println("verification error:", err)
+					return makeEphemeralResponse("Sorry, an error has occurred")
+				}
+				return makeEphemeralResponse(msg)
+			}
+		}
+
+		log.Println("couldn't find 'token' param for command 'verify'")
 		return nil
 	},
 }

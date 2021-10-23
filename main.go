@@ -13,7 +13,9 @@ import (
 	"github.com/diamondburned/arikawa/v3/state"
 )
 
-// To run, do `APP_ID="APP ID" GUILD_ID="GUILD ID" BOT_TOKEN="TOKEN HERE" go run .`
+func init() {
+	loadDB()
+}
 
 func main() {
 	appID := discord.AppID(mustSnowflakeEnv("APP_ID"))
@@ -81,11 +83,15 @@ func main() {
 		}
 	}()
 
+	cleanupPersistence := make(chan struct{})
+	go PersistenceRoutine(cleanupPersistence)
+
 	// block until ctrl+c or panic
-	fmt.Println("blocking...")
+	log.Println("blocking...")
 	wait()
-	fmt.Print("\n")
-	fmt.Println("cleaning up")
+	log.Println("cleaning up")
+
+	close(cleanupPersistence)
 
 	// cleanup
 	for name, cmd := range activeCommands {
@@ -102,6 +108,14 @@ func mustSnowflakeEnv(env string) discord.Snowflake {
 	s, err := discord.ParseSnowflake(os.Getenv(env))
 	if err != nil {
 		log.Fatalf("Invalid snowflake for $%s: %v", env, err)
+	}
+	return s
+}
+
+func mustEnv(name string) string {
+	s := os.Getenv(name)
+	if s == "" {
+		panic(fmt.Sprintln("No environment variable named", name))
 	}
 	return s
 }
