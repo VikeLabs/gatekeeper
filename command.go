@@ -22,7 +22,7 @@ func Register(email string) (bool, error) {
 	}
 
 	// check if right domain and not alias email address
-	if  !strings.HasSuffix(address.Address, "@"+EmailDomain) || strings.Contains("+", address.Address) {
+	if  !strings.HasSuffix(address.Address, "@"+EmailDomain) || strings.Contains(address.Address, "+") {
 		return false, nil
 	}
 
