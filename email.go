@@ -7,8 +7,8 @@ import (
 	"gopkg.in/gomail.v2"
 )
 
-var smtpHost = "smtp.gmail.com"
-var smtpPort = 587
+const smtpHost = "smtp.gmail.com"
+const smtpPort = 587
 
 var botEmail = mustEnv("BOT_EMAIL")
 var botPassword = mustEnv("BOT_PASSWORD")
