@@ -2,6 +2,8 @@ package main
 
 import (
 	"crypto/tls"
+	"fmt"
+	"net/mail"
 	"strings"
 
 	"gopkg.in/gomail.v2"
@@ -29,4 +31,23 @@ func SendEmail(to, subject, body string) error {
 
 func emailifyNewlines(in string) string {
 	return strings.ReplaceAll(in, "\n", "\r\n")
+}
+
+func validateEmail(email string) error {
+	address, err := mail.ParseAddress(email)
+	if err != nil {
+		return fmt.Errorf("email address format is invalid")
+	}
+
+	// is it the correct email domain?
+	if !strings.HasSuffix(address.Address, "@"+EmailDomain) {
+		return fmt.Errorf("email address must be a valid %s domain email address", EmailDomain)
+	}
+
+	// is it not an alias email address?
+	if strings.Contains(address.Address, "+") {
+		return fmt.Errorf("email address must not be an alias")
+	}
+
+	return nil
 }

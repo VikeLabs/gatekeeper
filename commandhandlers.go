@@ -81,15 +81,11 @@ var commandHandlerMap = map[string]CommandHandler{
 		for _, v := range options {
 			if v.Name == "email" {
 				// lowercase the email, trim whitespace
-				valid, err := Register(strings.TrimSpace(strings.ToLower(v.String())))
+				msg, err := Register(strings.TrimSpace(strings.ToLower(v.String())))
 				if err != nil {
 					log.Println("registration error:", err)
 					return makeEphemeralResponse("Sorry, an error has occurred")
 				}
-				if !valid {
-					return makeEphemeralResponse("Invalid domain, the only supported emails are " + EmailDomain)
-				}
-				msg := "A email has been sent to " + v.String() + "\nPlease use /verify <token> to verify your email address."
 				return makeEphemeralResponse(msg)
 			}
 		}

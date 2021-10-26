@@ -3,8 +3,6 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"net/mail"
-	"strings"
 
 	"github.com/diamondburned/arikawa/v3/api"
 	"github.com/diamondburned/arikawa/v3/discord"
@@ -14,16 +12,16 @@ import (
 var VerificationRole = discord.RoleID(mustSnowflakeEnv("VERIFIED_ROLE_ID"))
 var EmailDomain = mustEnv("EMAIL_DOMAIN")
 
-func Register(email string) (bool, error) {
-	// check if valid address
-	address, err := mail.ParseAddress(email)
-	if err != nil {
-		return false, nil
+func Register(email string) (string, error) {
+	if err := validateEmail(email); err != nil {
+		return err.Error(), nil
 	}
 
-	// check if right domain and not alias email address
-	if  !strings.HasSuffix(address.Address, "@"+EmailDomain) || strings.Contains(address.Address, "+") {
-		return false, nil
+	db.VerifiedEmails.M.Lock()
+	_, ok := db.VerifiedEmails.D[email]
+	db.VerifiedEmails.M.Unlock()
+	if ok {
+		return "email is currently claimed by a user", nil
 	}
 
 	// create token
@@ -37,7 +35,7 @@ func Register(email string) (bool, error) {
 
 	body := formatRegistrationEmail(token)
 
-	return true, SendEmail(email, "Gatekeeper Email Verification", body)
+	return "A email has been sent to " + email + "\nPlease use /verify <token> to verify your email address.", SendEmail(email, "Gatekeeper Email Verification", body)
 }
 
 func formatRegistrationEmail(token string) string {
