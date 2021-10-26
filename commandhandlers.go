@@ -80,15 +80,12 @@ var commandHandlerMap = map[string]CommandHandler{
 	"register": func(s *state.State, e *gateway.InteractionCreateEvent, options []discord.InteractionOption) *api.InteractionResponse {
 		for _, v := range options {
 			if v.Name == "email" {
-				valid, err := Register(strings.TrimSpace(v.String()))
+				// lowercase the email, trim whitespace
+				msg, err := Register(strings.TrimSpace(strings.ToLower(v.String())))
 				if err != nil {
 					log.Println("registration error:", err)
 					return makeEphemeralResponse("Sorry, an error has occurred")
 				}
-				if !valid {
-					return makeEphemeralResponse("Invalid domain, the only supported emails are " + EmailDomain)
-				}
-				msg := "A email has been sent to " + v.String() + "\nPlease use /verify <token> to verify your email address."
 				return makeEphemeralResponse(msg)
 			}
 		}

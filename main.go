@@ -20,11 +20,7 @@ func init() {
 func main() {
 	appID := discord.AppID(mustSnowflakeEnv("APP_ID"))
 	guildID := discord.GuildID(mustSnowflakeEnv("GUILD_ID"))
-
-	token := os.Getenv("BOT_TOKEN")
-	if token == "" {
-		log.Fatalln("No $BOT_TOKEN given.")
-	}
+	token := mustEnv("BOT_TOKEN")
 
 	s, err := state.New("Bot " + token)
 	if err != nil {
@@ -33,7 +29,6 @@ func main() {
 	}
 
 	s.AddHandler(MakeCommandHandlers(s))
-
 	s.AddIntents(gateway.IntentGuilds)
 
 	if err := s.Open(context.Background()); err != nil {
