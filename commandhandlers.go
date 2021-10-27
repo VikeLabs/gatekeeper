@@ -81,7 +81,7 @@ var commandHandlerMap = map[string]CommandHandler{
 		for _, v := range options {
 			if v.Name == "email" {
 				// lowercase the email, trim whitespace
-				msg, err := Register(strings.TrimSpace(strings.ToLower(v.String())))
+				msg, err := Register(s, e.Member.User.ID, e.GuildID, strings.TrimSpace(strings.ToLower(v.String())))
 				if err != nil {
 					log.Println("registration error:", err)
 					return makeEphemeralResponse("Sorry, an error has occurred")

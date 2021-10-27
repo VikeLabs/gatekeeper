@@ -12,14 +12,20 @@ import (
 var VerificationRole = discord.RoleID(mustSnowflakeEnv("VERIFIED_ROLE_ID"))
 var EmailDomain = mustEnv("EMAIL_DOMAIN")
 
-func Register(email string) (string, error) {
+func Register(s *state.State, user discord.UserID, guild discord.GuildID, email string) (string, error) {
 	if err := validateEmail(email); err != nil {
 		return err.Error(), nil
 	}
 
 	db.VerifiedEmails.M.Lock()
-	_, ok := db.VerifiedEmails.D[email]
+	userID, ok := db.VerifiedEmails.D[email]
 	db.VerifiedEmails.M.Unlock()
+
+	if ok && userID == user {
+		err := s.AddRole(guild, user, VerificationRole, api.AddRoleData{AuditLogReason: api.AuditLogReason("Gatekeeper verification")})
+		return "welcome back, you are verified", err
+	}
+
 	if ok {
 		return "email is currently claimed by a user", nil
 	}
@@ -34,8 +40,8 @@ func Register(email string) (string, error) {
 	db.EmailTokens.M.Unlock()
 
 	body := formatRegistrationEmail(token)
-
-	return "A email has been sent to " + email + "\nPlease use /verify <token> to verify your email address.", SendEmail(email, "Gatekeeper Email Verification", body)
+	err := SendEmail(email, "Gatekeeper verification", body)
+	return "A email has been sent to " + email + "\nPlease use /verify <token> to verify your email address.", err
 }
 
 func formatRegistrationEmail(token string) string {
