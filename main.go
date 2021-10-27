@@ -14,7 +14,7 @@ import (
 )
 
 func init() {
-	loadDB()
+	db.Load()
 }
 
 func main() {

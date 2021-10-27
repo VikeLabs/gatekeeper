@@ -17,9 +17,7 @@ func Register(s *state.State, user discord.UserID, guild discord.GuildID, email 
 		return err.Error(), nil
 	}
 
-	db.VerifiedEmails.M.Lock()
-	userID, ok := db.VerifiedEmails.D[email]
-	db.VerifiedEmails.M.Unlock()
+	userID, ok := db.GetVerifiedEmail(email)
 
 	if ok && userID == user {
 		err := s.AddRole(guild, user, VerificationRole, api.AddRoleData{AuditLogReason: api.AuditLogReason("Gatekeeper verification")})
@@ -35,9 +33,7 @@ func Register(s *state.State, user discord.UserID, guild discord.GuildID, email 
 	rand.Read(b)
 	token := hex.EncodeToString(b)
 
-	db.EmailTokens.M.Lock()
-	db.EmailTokens.D[token] = email
-	db.EmailTokens.M.Unlock()
+	db.SetEmailToken(email, token)
 
 	body := formatRegistrationEmail(token)
 	err := SendEmail(email, "Gatekeeper verification", body)
@@ -50,20 +46,15 @@ func formatRegistrationEmail(token string) string {
 }
 
 func Verify(s *state.State, user discord.UserID, guild discord.GuildID, token string) (msg string, err error) {
-	db.EmailTokens.M.Lock()
-	email, ok := db.EmailTokens.D[token]
-	db.EmailTokens.M.Unlock()
+	email, ok := db.GetEmailToken(token)
 	if !ok {
 		return "Sorry, verification failed.", nil
 	}
 
-	db.VerifiedEmails.M.Lock()
-	oldUser, ok := db.VerifiedEmails.D[email]
-	db.VerifiedEmails.M.Unlock()
+	oldUser, ok := db.GetVerifiedEmail(email)
+
 	if ok {
-		db.EmailTokens.M.Lock()
-		delete(db.EmailTokens.D, token)
-		db.EmailTokens.M.Unlock()
+		db.DeleteEmailToken(token)
 
 		return "Sorry, this email is already in use by <@" + oldUser.String() + ">. Please contact a moderator to be verified manually .", nil
 		// msg = msg + "This email was in use by <@" + oldUser.String() + ">. They will now be unverified."
@@ -81,13 +72,8 @@ func Verify(s *state.State, user discord.UserID, guild discord.GuildID, token st
 		return "", err
 	}
 
-	db.EmailTokens.M.Lock()
-	delete(db.EmailTokens.D, token)
-	db.EmailTokens.M.Unlock()
-
-	db.VerifiedEmails.M.Lock()
-	db.VerifiedEmails.D[email] = user
-	db.VerifiedEmails.M.Unlock()
+	db.DeleteEmailToken(token)
+	db.SetVerifiedEmail(email, user)
 
 	msg += "\nCongrats! You've been verified!"
 
