@@ -24,7 +24,6 @@ func SendEmail(to, subject, body string) error {
 	m.SetAddressHeader("To", to, "")
 	m.SetHeader("Subject", subject)
 	m.SetBody("text/plain", emailifyNewlines(body))
-	m.SetHeader("User-Agent", "Mozilla/5.0 (X11; Linux x86_64; rv:91.0) Gecko/20100101 Thunderbird/91.1.1")
 
 	return emailDialer.DialAndSend(m)
 }
