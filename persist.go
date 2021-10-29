@@ -16,10 +16,12 @@ type JSONDB struct {
 }
 
 func PersistenceRoutine(kill <-chan struct{}) {
-	ticker := time.Tick(persistenceFrequency)
+	ticker := time.NewTicker(persistenceFrequency)
+	defer ticker.Stop()
+
 	for {
 		select {
-		case <-ticker:
+		case <-ticker.C:
 			db.Persist()
 		case <-kill:
 			db.Persist()
