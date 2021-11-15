@@ -92,11 +92,19 @@ func (d *DB) Load() {
 	}
 
 	d.EmailTokens.M.Lock()
-	d.EmailTokens.D = jsonDB.EmailTokens
+	if jsonDB.EmailTokens != nil {
+		d.EmailTokens.D = jsonDB.EmailTokens
+	} else {
+		d.EmailTokens.D = map[string]string{}
+	}
 	d.EmailTokens.M.Unlock()
 
 	d.VerifiedEmails.M.Lock()
-	d.VerifiedEmails.D = jsonDB.VerifiedEmails
+	if jsonDB.VerifiedEmails != nil {
+		d.VerifiedEmails.D = jsonDB.VerifiedEmails
+	} else {
+		d.VerifiedEmails.D = map[string]discord.UserID{}
+	}
 	d.VerifiedEmails.M.Unlock()
 
 	log.Printf("db successfully loaded from disk. %v members verified\n", len(d.VerifiedEmails.D))
