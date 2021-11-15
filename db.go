@@ -83,6 +83,7 @@ func (d *DB) Load() {
 	}
 	if err != nil {
 		log.Println("error reading db from disk:", err)
+		return
 	}
 
 	var jsonDB JSONDB
