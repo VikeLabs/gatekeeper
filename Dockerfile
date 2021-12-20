@@ -1,6 +1,10 @@
-FROM golang:1.15.6-alpine as builder
+FROM golang:1.17.1-alpine as builder
 LABEL maintainer="VikeLabs <gatekeeper@vikelabs.ca>"
 
+RUN apk update && \
+    apk add ca-certificates && \
+    rm -rf /var/cache/apk/* && \
+    update-ca-certificates
 WORKDIR /app
 COPY go.mod go.sum ./
 
@@ -15,7 +19,7 @@ WORKDIR /root/
 
 # Copy the Pre-built binary file from the build stage
 COPY --from=builder /app/main .
-
-ENV BOT_TOKEN=""
+# Copy the certificates
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 
 CMD ["./main"]
