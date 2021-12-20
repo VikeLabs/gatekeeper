@@ -1,24 +1,19 @@
 package main
 
 import (
-	"crypto/tls"
+	"bytes"
+	"crypto/rand"
+	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"net/mail"
 	"strings"
 
+	"golang.org/x/crypto/argon2"
 	"gopkg.in/gomail.v2"
 )
 
-const smtpHost = "smtp.gmail.com"
-const smtpPort = 587
-
-var botEmail = mustEnv("BOT_EMAIL")
-var botPassword = mustEnv("BOT_PASSWORD")
-
-var emailDialer = gomail.NewDialer(smtpHost, smtpPort, botEmail, botPassword)
-
 func SendEmail(to, subject, body string) error {
-	emailDialer.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 	m := gomail.NewMessage()
 	m.SetAddressHeader("From", botEmail, "Gatekeeper")
 	m.SetAddressHeader("To", to, "")
@@ -28,19 +23,24 @@ func SendEmail(to, subject, body string) error {
 	return emailDialer.DialAndSend(m)
 }
 
+func makeToken() string {
+	b := make([]byte, 4)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
 func emailifyNewlines(in string) string {
 	return strings.ReplaceAll(in, "\n", "\r\n")
 }
 
-func validateEmail(email string) error {
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
+func validateEmailFormat(email string) error {
 	address, err := mail.ParseAddress(email)
 	if err != nil {
 		return fmt.Errorf("email address format is invalid")
-	}
-
-	// is it the correct email domain?
-	if !strings.HasSuffix(address.Address, "@"+EmailDomain) {
-		return fmt.Errorf("email address must be a valid %s domain email address", EmailDomain)
 	}
 
 	// is it not an alias email address?
@@ -49,4 +49,23 @@ func validateEmail(email string) error {
 	}
 
 	return nil
+}
+
+func hash(email string, guild uint64) []byte {
+	guildBytes := new(bytes.Buffer)
+	binary.Write(guildBytes, binary.BigEndian, guild)
+
+	return argon2.IDKey(
+		[]byte(email),
+		guildBytes.Bytes(),
+		1,       // time=1
+		64*1024, // mem = 64MB
+		1,       // 1 thread cause portability i guess
+		32,      // 32 byte output key
+	)
+}
+
+func formatRegistrationEmail(token string) string {
+	return ("Greetings from Gatekeeper!\n\n" +
+		"Your verification token is: " + token)
 }

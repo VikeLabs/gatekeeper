@@ -1,81 +1,112 @@
 package main
 
 import (
-	"crypto/rand"
-	"encoding/hex"
+	"fmt"
+	"log"
 
 	"github.com/diamondburned/arikawa/v3/api"
 	"github.com/diamondburned/arikawa/v3/discord"
 	"github.com/diamondburned/arikawa/v3/state"
 )
 
-var VerificationRole = discord.RoleID(mustSnowflakeEnv("VERIFIED_ROLE_ID"))
-var EmailDomain = mustEnv("EMAIL_DOMAIN")
+const (
+	ErrRegisteredOrBlockedEmail = "This email has either been registered or is blocked"
+)
 
-func Register(s *state.State, user discord.UserID, guild discord.GuildID, email string) (string, error) {
-	if err := validateEmail(email); err != nil {
-		return err.Error(), nil
+func Register(s *state.State, userID discord.UserID, guildID discord.GuildID, email string) (string, error) {
+	// TODO: rate limit
+
+	// basic checks like email format, not an alias etc.
+	if err := validateEmailFormat(email); err != nil {
+		return "Please insert a valid email", nil
 	}
 
-	userID, ok := db.GetVerifiedEmail(email)
-
-	if ok && userID == user {
-		err := s.AddRole(guild, user, VerificationRole, api.AddRoleData{AuditLogReason: api.AuditLogReason("Gatekeeper verification")})
-		return "welcome back, you are verified", err
+	// check if domain is valid
+	domain, err := repo.IsDomainValid(guildID, email)
+	if err != nil {
+		return "", err
+	}
+	if domain == "" {
+		// TODO: return a list of valid domains
+		return "Please enter an email from an accepted domain name.", nil
 	}
 
-	if ok {
-		return "email is currently claimed by a user", nil
+	msg := "A email has been sent to `" + email + "` if it was valid.\nPlease use `/verify <token>` to verify your email address."
+
+	// check if the email can be used for registration (ie. not used or blocked)
+	exists, err := repo.IsEmailValid(guildID, userID, email)
+	if err != nil {
+		return "", err
+	}
+	if exists {
+		return msg, nil
 	}
 
-	// create token
-	b := make([]byte, 4)
-	rand.Read(b)
-	token := hex.EncodeToString(b)
+	token := makeToken()
+	repo.InsertToken(guildID, userID, email, token, domain)
 
-	db.SetEmailToken(email, token)
-
-	body := formatRegistrationEmail(token)
-	err := SendEmail(email, "Gatekeeper verification", body)
-	return "A email has been sent to " + email + "\nPlease use /verify <token> to verify your email address.", err
+	// send email to user
+	// in a go routine so we can return the message without waiting for the email to be sent
+	go func() {
+		SendEmail(email, "Gatekeeper verification", formatRegistrationEmail(token))
+		if err != nil {
+			log.Println("failed to send email:", err)
+		}
+	}()
+	return msg, nil
 }
 
-func formatRegistrationEmail(token string) string {
-	return ("Greetings from Gatekeeper!\n\n" +
-		"Your verification token is: " + token)
-}
-
-func Verify(s *state.State, user discord.UserID, guild discord.GuildID, token string) (msg string, err error) {
-	email, ok := db.GetEmailToken(token)
-	if !ok {
-		return "Sorry, verification failed.", nil
-	}
-
-	oldUser, ok := db.GetVerifiedEmail(email)
-
-	if ok {
-		db.DeleteEmailToken(token)
-
-		return "Sorry, this email is already in use by <@" + oldUser.String() + ">. Please contact a moderator to be verified manually .", nil
-		// msg = msg + "This email was in use by <@" + oldUser.String() + ">. They will now be unverified."
-		// // TODO ==================================================
-		// oldMember :=
-		// if (s.Member(guild, oldUser))
-		// err = s.RemoveRole(guild, oldUser, VerificationRole, api.AuditLogReason("Gatekeeper verification"))
-		// if err != nil {
-		// 	return "", errors.Wrap(err, "cannot remove role from user")
-		// }
-	}
-
-	err = s.AddRole(guild, user, VerificationRole, api.AddRoleData{AuditLogReason: api.AuditLogReason("Gatekeeper verification")})
+func Verify(s *state.State, userID discord.UserID, guildID discord.GuildID, token string) (msg string, err error) {
+	res, err := repo.GetToken(guildID, token)
+	// issue with token retrieval
 	if err != nil {
 		return "", err
 	}
 
-	db.DeleteEmailToken(token)
-	db.SetVerifiedEmail(email, user)
+	// token not found
+	if res == nil {
+		return "Token not found.", fmt.Errorf("invalid token")
+	}
+
+	// is token being used by another user?
+	if res.UserID != userID {
+		return "Please verify from the same account you initiated the registration", fmt.Errorf("user is attempting to verify from a different account")
+	}
+
+	// is this email being used by another user in the same guild?
+	// on the small offchance that a user creates numerous tokens.
+	exists, err := repo.IsEmailValid(guildID, userID, res.Email)
+	if err != nil {
+		return "", err
+	}
+	if exists {
+		return ErrRegisteredOrBlockedEmail, fmt.Errorf("email is being used by another user")
+	}
+
+	// save the user details to the database as verified
+	if err := repo.InsertVerifiedEmail(guildID, userID, res.Email); err != nil {
+		return "", err
+	}
+
+	// add roles associated with the domain
+	roles, err := repo.GetRolesByGuildAndDomain(guildID, res.Domain)
+	if err != nil {
+		return "", err
+	}
+
+	for _, role := range *roles {
+		err = s.AddRole(guildID, userID, role, api.AddRoleData{AuditLogReason: api.AuditLogReason("Gatekeeper verification")})
+		if err != nil {
+			log.Println("error adding role:", err)
+		}
+	}
+
+	// remove token
+	err = repo.DeleteTokens(guildID, userID, res.Domain)
+	if err != nil {
+		log.Println("error deleting token:", err)
+	}
 
 	msg += "\nCongrats! You've been verified!"
-
 	return msg, nil
 }
