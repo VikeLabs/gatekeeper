@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"log"
 
 	"github.com/diamondburned/arikawa/v3/api"
 	"github.com/diamondburned/arikawa/v3/discord"
@@ -36,8 +37,16 @@ func Register(s *state.State, user discord.UserID, guild discord.GuildID, email 
 	db.SetEmailToken(email, token)
 
 	body := formatRegistrationEmail(token)
-	err := SendEmail(email, "Gatekeeper verification", body)
-	return "A email has been sent to " + email + "\nPlease use /verify <token> to verify your email address.", err
+
+	// put this in a goroutine because the interaction needs to respond quickly
+	// if we want to display failure we should send an ephemeral message and edit it later
+	go func() {
+		err := SendEmail(email, "Gatekeeper verification", body)
+		if err != nil {
+			log.Printf("Error sending email to %v: %v\n", email, err)
+		}
+	}()
+	return "A email has been sent to " + email + "\nPlease use /verify <token> to verify your email address.", nil
 }
 
 func formatRegistrationEmail(token string) string {
