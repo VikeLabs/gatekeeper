@@ -22,11 +22,7 @@ func main() {
 	guildID := discord.GuildID(mustSnowflakeEnv("GUILD_ID"))
 	token := mustEnv("BOT_TOKEN")
 
-	s, err := state.New("Bot " + token)
-	if err != nil {
-		log.Fatalln("Session failed:", err)
-		return
-	}
+	s := state.New("Bot " + token)
 
 	s.AddHandler(MakeCommandHandlers(s))
 	s.AddIntents(gateway.IntentGuilds)

@@ -18,10 +18,9 @@ var CommandDefinitions = []api.CreateCommandData{
 		Description: "Join the server by registering your email",
 		Type:        discord.ChatInputCommand,
 		Options: []discord.CommandOption{
-			{
-				Name:        "email",
+			&discord.StringOption{
+				OptionName:  "email",
 				Description: "The email that you'd like to register",
-				Type:        discord.StringOption,
 				Required:    true,
 			},
 		},
@@ -31,10 +30,9 @@ var CommandDefinitions = []api.CreateCommandData{
 		Description: "Finalize registration by verifying your email",
 		Type:        discord.ChatInputCommand,
 		Options: []discord.CommandOption{
-			{
-				Name:        "token",
+			&discord.StringOption{
+				OptionName:  "token",
 				Description: "The that you recieved in your email",
-				Type:        discord.StringOption,
 				Required:    true,
 			},
 		},
@@ -44,26 +42,30 @@ var CommandDefinitions = []api.CreateCommandData{
 		Description: "Just like Unix",
 		Type:        discord.ChatInputCommand,
 		Options: []discord.CommandOption{
-			{
-				Name:        "message",
+			&discord.StringOption{
+				OptionName:  "message",
 				Description: "Echo me!",
-				Type:        discord.StringOption,
 				Required:    true,
 			},
 		},
 	},
 }
 
-type CommandHandler func(s *state.State, e *gateway.InteractionCreateEvent, options []discord.InteractionOption) *api.InteractionResponse
+type CommandHandler func(s *state.State, e *gateway.InteractionCreateEvent, options discord.CommandInteractionOptions) *api.InteractionResponse
+
+type Command struct {
+	Handler CommandHandler
+	Data    api.CreateCommandData
+}
 
 var commandHandlerMap = map[string]CommandHandler{
-	"ping": func(s *state.State, e *gateway.InteractionCreateEvent, options []discord.InteractionOption) *api.InteractionResponse {
+	"ping": func(s *state.State, e *gateway.InteractionCreateEvent, options discord.CommandInteractionOptions) *api.InteractionResponse {
 		latency := time.Since(e.ID.Time())
 		response := "Pong! `time=" + latency.String() + "`"
 
 		return makeEphemeralResponse(response)
 	},
-	"echo": func(s *state.State, e *gateway.InteractionCreateEvent, options []discord.InteractionOption) *api.InteractionResponse {
+	"echo": func(s *state.State, e *gateway.InteractionCreateEvent, options discord.CommandInteractionOptions) *api.InteractionResponse {
 		if !sentByOwner(s, e) {
 			return makeEphemeralResponse("Sorry, only the server owner can use this command.")
 		}
@@ -77,7 +79,7 @@ var commandHandlerMap = map[string]CommandHandler{
 		log.Println("couldn't find 'message' param for command 'echo'")
 		return nil
 	},
-	"register": func(s *state.State, e *gateway.InteractionCreateEvent, options []discord.InteractionOption) *api.InteractionResponse {
+	"register": func(s *state.State, e *gateway.InteractionCreateEvent, options discord.CommandInteractionOptions) *api.InteractionResponse {
 		for _, v := range options {
 			if v.Name == "email" {
 				// lowercase the email, trim whitespace
@@ -93,7 +95,7 @@ var commandHandlerMap = map[string]CommandHandler{
 		log.Println("couldn't find 'email' param for command 'register'")
 		return nil
 	},
-	"verify": func(s *state.State, e *gateway.InteractionCreateEvent, options []discord.InteractionOption) *api.InteractionResponse {
+	"verify": func(s *state.State, e *gateway.InteractionCreateEvent, options discord.CommandInteractionOptions) *api.InteractionResponse {
 		for _, v := range options {
 			if v.Name == "token" {
 				if e.Member == nil {
@@ -135,16 +137,16 @@ func sentByOwner(s *state.State, e *gateway.InteractionCreateEvent) bool {
 
 func MakeCommandHandlers(s *state.State) func(*gateway.InteractionCreateEvent) {
 	return func(e *gateway.InteractionCreateEvent) {
-		switch e.Data.Type() {
-		case discord.PingInteraction:
+		switch i := e.Data.(type) {
+		case *discord.PingInteraction:
 			data := api.InteractionResponse{
 				Type: api.PongInteraction,
 			}
 			if err := s.RespondInteraction(e.ID, e.Token, data); err != nil {
 				log.Println("failed to send interaction callback:", err)
 			}
-		case discord.CommandInteraction:
-			cmd := e.Data.(*discord.CommandInteractionData)
+		case *discord.CommandInteraction:
+			cmd := i
 			name := cmd.Name
 			options := cmd.Options
 
@@ -163,6 +165,8 @@ func MakeCommandHandlers(s *state.State) func(*gateway.InteractionCreateEvent) {
 			if err := s.RespondInteraction(e.ID, e.Token, *data); err != nil {
 				log.Println("failed to send interaction callback:", err)
 			}
+		default:
+			log.Printf("Unknown interaction of type %T\n", i)
 		}
 	}
 }
