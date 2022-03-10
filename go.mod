@@ -1,4 +1,4 @@
-module shittygatekeeper
+module gatekeeper
 
 go 1.17
 
