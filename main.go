@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/diamondburned/arikawa/v3/api"
 	"github.com/diamondburned/arikawa/v3/discord"
 	"github.com/diamondburned/arikawa/v3/gateway"
 	"github.com/diamondburned/arikawa/v3/state"
@@ -24,7 +25,7 @@ func main() {
 
 	s := state.New("Bot " + token)
 
-	s.AddHandler(MakeCommandHandlers(s))
+	s.AddHandler(MakeCommandHandlers(s, commandsGlobal))
 	s.AddIntents(gateway.IntentGuilds)
 
 	if err := s.Open(context.Background()); err != nil {
@@ -34,12 +35,12 @@ func main() {
 
 	log.Println("Gateway connected. Getting all guild commands.")
 
-	commands, err := s.GuildCommands(appID, guildID)
+	existingCommands, err := s.GuildCommands(appID, guildID)
 	if err != nil {
 		log.Fatalln("failed to get guild commands:", err)
 	}
 
-	for _, command := range commands {
+	for _, command := range existingCommands {
 		log.Println("Existing command", command.Name, "found.")
 
 		// delete pre-existing commands for this bot (in case a cleanup failed or something)
@@ -49,9 +50,14 @@ func main() {
 	}
 
 	// track commands so we can delete them on cleanup
-	activeCommands := map[string]*discord.Command{}
+	activeCommands := make(map[string]*discord.Command)
 
-	for _, command := range CommandDefinitions {
+	definitions := make([]api.CreateCommandData, 0, len(commandsGlobal))
+	for _, v := range commandsGlobal {
+		definitions = append(definitions, v.Data)
+	}
+
+	for _, command := range definitions {
 		newCmd, err := s.CreateGuildCommand(appID, guildID, command)
 		if err != nil {
 			log.Fatalln("failed to create guild command:", err)
@@ -67,7 +73,7 @@ func main() {
 	wait := func() func() {
 		sigChan := make(chan os.Signal)
 
-		signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
 		return func() {
 			<-sigChan

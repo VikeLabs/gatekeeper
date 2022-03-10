@@ -12,45 +12,6 @@ import (
 	"github.com/diamondburned/arikawa/v3/utils/json/option"
 )
 
-var CommandDefinitions = []api.CreateCommandData{
-	{
-		Name:        "register",
-		Description: "Join the server by registering your email",
-		Type:        discord.ChatInputCommand,
-		Options: []discord.CommandOption{
-			&discord.StringOption{
-				OptionName:  "email",
-				Description: "The email that you'd like to register",
-				Required:    true,
-			},
-		},
-	},
-	{
-		Name:        "verify",
-		Description: "Finalize registration by verifying your email",
-		Type:        discord.ChatInputCommand,
-		Options: []discord.CommandOption{
-			&discord.StringOption{
-				OptionName:  "token",
-				Description: "The that you recieved in your email",
-				Required:    true,
-			},
-		},
-	},
-	{
-		Name:        "echo",
-		Description: "Just like Unix",
-		Type:        discord.ChatInputCommand,
-		Options: []discord.CommandOption{
-			&discord.StringOption{
-				OptionName:  "message",
-				Description: "Echo me!",
-				Required:    true,
-			},
-		},
-	},
-}
-
 type CommandHandler func(s *state.State, e *gateway.InteractionCreateEvent, options discord.CommandInteractionOptions) *api.InteractionResponse
 
 type Command struct {
@@ -58,46 +19,90 @@ type Command struct {
 	Data    api.CreateCommandData
 }
 
-var commandHandlerMap = map[string]CommandHandler{
-	"ping": func(s *state.State, e *gateway.InteractionCreateEvent, options discord.CommandInteractionOptions) *api.InteractionResponse {
-		latency := time.Since(e.ID.Time())
-		response := "Pong! `" + latency.String() + "`"
+var pingHandler = func(s *state.State, e *gateway.InteractionCreateEvent, options discord.CommandInteractionOptions) *api.InteractionResponse {
+	latency := time.Since(e.ID.Time())
+	response := "Pong! `" + latency.String() + "`"
+	return makeEphemeralResponse(response)
+}
 
-		return makeEphemeralResponse(response)
+var commandsGlobal = []Command{
+	{
+		Data: api.CreateCommandData{
+			Name:        "echo",
+			Description: "Just like Unix",
+			Type:        discord.ChatInputCommand,
+			Options: []discord.CommandOption{
+				&discord.StringOption{
+					OptionName:  "message",
+					Description: "Echo me!",
+					Required:    true,
+				},
+			},
+		},
+		Handler: func(s *state.State, e *gateway.InteractionCreateEvent, options discord.CommandInteractionOptions) *api.InteractionResponse {
+			if !sentByOwner(s, e) {
+				return makeEphemeralResponse("Sorry, only the server owner can use this command.")
+			}
+
+			message := options.Find("message")
+			return makeEphemeralResponse(message.String())
+		},
 	},
-	"echo": func(s *state.State, e *gateway.InteractionCreateEvent, options discord.CommandInteractionOptions) *api.InteractionResponse {
-		if !sentByOwner(s, e) {
-			return makeEphemeralResponse("Sorry, only the server owner can use this command.")
-		}
 
-		message := options.Find("message")
-		return makeEphemeralResponse(message.String())
+	{
+		Data: api.CreateCommandData{
+			Name:        "register",
+			Description: "Join the server by registering your email",
+			Type:        discord.ChatInputCommand,
+			Options: []discord.CommandOption{
+				&discord.StringOption{
+					OptionName:  "email",
+					Description: "The email that you'd like to register",
+					Required:    true,
+				},
+			},
+		},
+		Handler: func(s *state.State, e *gateway.InteractionCreateEvent, options discord.CommandInteractionOptions) *api.InteractionResponse {
+			email := options.Find("email")
+
+			// lowercase the email, trim whitespace
+			msg, err := Register(s, e.Member.User.ID, e.GuildID, strings.TrimSpace(strings.ToLower(email.String())))
+			if err != nil {
+				log.Println("registration error:", err)
+				return makeEphemeralResponse("Sorry, an error has occurred")
+			}
+			return makeEphemeralResponse(msg)
+		},
 	},
-	"register": func(s *state.State, e *gateway.InteractionCreateEvent, options discord.CommandInteractionOptions) *api.InteractionResponse {
-		email := options.Find("email")
 
-				// lowercase the email, trim whitespace
-		msg, err := Register(s, e.Member.User.ID, e.GuildID, strings.TrimSpace(strings.ToLower(email.String())))
-				if err != nil {
-					log.Println("registration error:", err)
-					return makeEphemeralResponse("Sorry, an error has occurred")
-				}
-				return makeEphemeralResponse(msg)
-	},
-	"verify": func(s *state.State, e *gateway.InteractionCreateEvent, options discord.CommandInteractionOptions) *api.InteractionResponse {
-		// exit early if in DMs somehow
-				if e.Member == nil {
-					return nil
-				}
+	{
+		Data: api.CreateCommandData{
+			Name:        "verify",
+			Description: "Finalize registration by verifying your email",
+			Type:        discord.ChatInputCommand,
+			Options: []discord.CommandOption{
+				&discord.StringOption{
+					OptionName:  "token",
+					Description: "The that you recieved in your email",
+					Required:    true,
+				},
+			},
+		},
+		Handler: func(s *state.State, e *gateway.InteractionCreateEvent, options discord.CommandInteractionOptions) *api.InteractionResponse {
+			// exit early if in DMs somehow
+			if e.Member == nil {
+				return nil
+			}
 
-		token := options.Find("token")
+			token := options.Find("token")
 
-		msg, err := Verify(s, e.Member.User.ID, e.GuildID, strings.TrimSpace(token.String()))
-				if err != nil {
-					log.Println("verification error:", err)
-					return makeEphemeralResponse("Sorry, an error has occurred")
-				}
-				return makeEphemeralResponse(msg)
+			msg, err := Verify(s, e.Member.User.ID, e.GuildID, strings.TrimSpace(token.String()))
+			if err != nil {
+				log.Println("verification error:", err)
+				return makeEphemeralResponse("Sorry, an error has occurred")
+			}
+			return makeEphemeralResponse(msg)
+		},
 	},
 }
 
@@ -121,7 +126,15 @@ func sentByOwner(s *state.State, e *gateway.InteractionCreateEvent) bool {
 	return thisGuild.OwnerID == e.Member.User.ID
 }
 
-func MakeCommandHandlers(s *state.State) func(*gateway.InteractionCreateEvent) {
+func MakeCommandHandlers(s *state.State, commands []Command) func(*gateway.InteractionCreateEvent) {
+	handlers := make(map[string]CommandHandler, len(commands))
+
+	handlers["ping"] = pingHandler
+
+	for _, c := range commands {
+		handlers[c.Data.Name] = c.Handler
+	}
+
 	return func(e *gateway.InteractionCreateEvent) {
 		switch i := e.Data.(type) {
 		case *discord.PingInteraction:
@@ -136,7 +149,7 @@ func MakeCommandHandlers(s *state.State) func(*gateway.InteractionCreateEvent) {
 			name := cmd.Name
 			options := cmd.Options
 
-			handler, ok := commandHandlerMap[name]
+			handler, ok := handlers[name]
 			if !ok {
 				log.Println("Unrecognised command:", name)
 				return
