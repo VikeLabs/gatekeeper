@@ -61,7 +61,7 @@ type Command struct {
 var commandHandlerMap = map[string]CommandHandler{
 	"ping": func(s *state.State, e *gateway.InteractionCreateEvent, options discord.CommandInteractionOptions) *api.InteractionResponse {
 		latency := time.Since(e.ID.Time())
-		response := "Pong! `time=" + latency.String() + "`"
+		response := "Pong! `" + latency.String() + "`"
 
 		return makeEphemeralResponse(response)
 	},
@@ -70,48 +70,34 @@ var commandHandlerMap = map[string]CommandHandler{
 			return makeEphemeralResponse("Sorry, only the server owner can use this command.")
 		}
 
-		for _, v := range options {
-			if v.Name == "message" {
-				return makeEphemeralResponse(v.String())
-			}
-		}
-
-		log.Println("couldn't find 'message' param for command 'echo'")
-		return nil
+		message := options.Find("message")
+		return makeEphemeralResponse(message.String())
 	},
 	"register": func(s *state.State, e *gateway.InteractionCreateEvent, options discord.CommandInteractionOptions) *api.InteractionResponse {
-		for _, v := range options {
-			if v.Name == "email" {
+		email := options.Find("email")
+
 				// lowercase the email, trim whitespace
-				msg, err := Register(s, e.Member.User.ID, e.GuildID, strings.TrimSpace(strings.ToLower(v.String())))
+		msg, err := Register(s, e.Member.User.ID, e.GuildID, strings.TrimSpace(strings.ToLower(email.String())))
 				if err != nil {
 					log.Println("registration error:", err)
 					return makeEphemeralResponse("Sorry, an error has occurred")
 				}
 				return makeEphemeralResponse(msg)
-			}
-		}
-
-		log.Println("couldn't find 'email' param for command 'register'")
-		return nil
 	},
 	"verify": func(s *state.State, e *gateway.InteractionCreateEvent, options discord.CommandInteractionOptions) *api.InteractionResponse {
-		for _, v := range options {
-			if v.Name == "token" {
+		// exit early if in DMs somehow
 				if e.Member == nil {
 					return nil
 				}
-				msg, err := Verify(s, e.Member.User.ID, e.GuildID, strings.TrimSpace(v.String()))
+
+		token := options.Find("token")
+
+		msg, err := Verify(s, e.Member.User.ID, e.GuildID, strings.TrimSpace(token.String()))
 				if err != nil {
 					log.Println("verification error:", err)
 					return makeEphemeralResponse("Sorry, an error has occurred")
 				}
 				return makeEphemeralResponse(msg)
-			}
-		}
-
-		log.Println("couldn't find 'token' param for command 'verify'")
-		return nil
 	},
 }
 
