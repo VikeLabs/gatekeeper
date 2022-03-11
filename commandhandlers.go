@@ -66,7 +66,7 @@ var commandsGlobal = []Command{
 			email := options.Find("email")
 
 			// lowercase the email, trim whitespace
-			msg, err := Register(s, e.Member.User.ID, e.GuildID, strings.TrimSpace(strings.ToLower(email.String())))
+			msg, err := Register(s, e, e.Member.User.ID, e.GuildID, strings.TrimSpace(strings.ToLower(email.String())))
 			if err != nil {
 				log.Println("registration error:", err)
 				return makeEphemeralResponse("Sorry, an error has occurred")

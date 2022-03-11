@@ -7,13 +7,15 @@ import (
 
 	"github.com/diamondburned/arikawa/v3/api"
 	"github.com/diamondburned/arikawa/v3/discord"
+	"github.com/diamondburned/arikawa/v3/gateway"
 	"github.com/diamondburned/arikawa/v3/state"
+	"github.com/diamondburned/arikawa/v3/utils/json/option"
 )
 
 var VerificationRole = discord.RoleID(mustSnowflakeEnv("VERIFIED_ROLE_ID"))
 var EmailDomain = mustEnv("EMAIL_DOMAIN")
 
-func Register(s *state.State, user discord.UserID, guild discord.GuildID, email string) (string, error) {
+func Register(s *state.State, e *gateway.InteractionCreateEvent, user discord.UserID, guild discord.GuildID, email string) (string, error) {
 	if err := validateEmail(email); err != nil {
 		return err.Error(), nil
 	}
@@ -39,14 +41,27 @@ func Register(s *state.State, user discord.UserID, guild discord.GuildID, email 
 	body := formatRegistrationEmail(token)
 
 	// put this in a goroutine because the interaction needs to respond quickly
-	// if we want to display failure we should send an ephemeral message and edit it later
-	go func() {
-		err := SendEmail(email, "Gatekeeper verification", body)
-		if err != nil {
-			log.Printf("Error sending email to %v: %v\n", email, err)
-		}
+	// if we want to display failure/success we should send an ephemeral message and edit it later
+	defer func() {
+		go func() {
+			err := SendEmail(email, "Gatekeeper verification", body)
+			if err != nil {
+				log.Printf("Error sending email to %v: %v\n", email, err)
+				editedResponseData := api.EditInteractionResponseData{Content: option.NewNullableString("⚠️ Error sending email :(")}
+				if _, err := s.EditInteractionResponse(e.AppID, e.Token, editedResponseData); err != nil {
+					log.Println("failed to send interaction callback:", err)
+				}
+				return
+			} else {
+				responseText := "✅ An email has been sent to " + email + "\nPlease use /verify <token> to verify your email address."
+				editedResponseData := api.EditInteractionResponseData{Content: option.NewNullableString(responseText)}
+				if _, err := s.EditInteractionResponse(e.AppID, e.Token, editedResponseData); err != nil {
+					log.Println("failed to send interaction callback:", err)
+				}
+			}
+		}()
 	}()
-	return "A email has been sent to " + email + "\nPlease use /verify <token> to verify your email address.", nil
+	return "⌛ Sending email...", nil
 }
 
 func formatRegistrationEmail(token string) string {
