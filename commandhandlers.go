@@ -66,7 +66,7 @@ var commandsGlobal = []Command{
 			email := options.Find("email")
 
 			// lowercase the email, trim whitespace
-			msg, err := Register(s, e, e.Member.User.ID, e.GuildID, strings.TrimSpace(strings.ToLower(email.String())))
+			msg, err := Register(s, editResponse, e.SenderID(), e.GuildID, strings.TrimSpace(strings.ToLower(email.String())))
 			if err != nil {
 				log.Println("registration error:", err)
 				return makeEphemeralResponse("Sorry, an error has occurred")
@@ -96,7 +96,7 @@ var commandsGlobal = []Command{
 
 			token := options.Find("token")
 
-			msg, err := Verify(s, e.Member.User.ID, e.GuildID, strings.TrimSpace(token.String()))
+			msg, err := Verify(s, e.SenderID(), e.GuildID, strings.TrimSpace(token.String()))
 			if err != nil {
 				log.Println("verification error:", err)
 				return makeEphemeralResponse("Sorry, an error has occurred")
@@ -123,7 +123,7 @@ func sentByOwner(s *state.State, e *gateway.InteractionCreateEvent) bool {
 		return false
 	}
 
-	return thisGuild.OwnerID == e.Member.User.ID
+	return thisGuild.OwnerID == e.SenderID()
 }
 
 func MakeCommandHandlers(s *state.State, commands []Command) func(*gateway.InteractionCreateEvent) {
