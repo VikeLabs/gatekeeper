@@ -65,6 +65,12 @@ var commandsGlobal = []Command{
 		Handler: func(s *state.State, e *gateway.InteractionCreateEvent, options discord.CommandInteractionOptions) *api.InteractionResponse {
 			email := options.Find("email")
 
+			editResponse := func(newContent string) error {
+				editedResponseData := api.EditInteractionResponseData{Content: option.NewNullableString("⚠️ Error sending email :(")}
+				_, err := s.EditInteractionResponse(e.AppID, e.Token, editedResponseData)
+				return err
+			}
+
 			// lowercase the email, trim whitespace
 			msg, err := Register(s, editResponse, e.SenderID(), e.GuildID, strings.TrimSpace(strings.ToLower(email.String())))
 			if err != nil {
