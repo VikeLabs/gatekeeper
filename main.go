@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -98,7 +97,7 @@ func main() {
 		}
 	}
 
-	fmt.Println("exiting")
+	log.Fatalln("exiting")
 }
 
 func mustSnowflakeEnv(env string) discord.Snowflake {
@@ -112,7 +111,7 @@ func mustSnowflakeEnv(env string) discord.Snowflake {
 func mustEnv(name string) string {
 	s := os.Getenv(name)
 	if s == "" {
-		panic(fmt.Sprintln("No environment variable named", name))
+		log.Fatalln("No environment variable named", name)
 	}
 	return s
 }
