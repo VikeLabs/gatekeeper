@@ -23,7 +23,7 @@ func Register(s *state.State, editResponse func(string) error, user discord.User
 
 	if ok && userID == user {
 		err := addVerifiedRole(s, guild, user)
-		return "welcome back, you are verified", err
+		return "Welcome back, you have been verified", err
 	}
 
 	// create token
@@ -42,7 +42,7 @@ func Register(s *state.State, editResponse func(string) error, user discord.User
 		go func() {
 			err := SendEmail(email, "Gatekeeper verification", body)
 			if err != nil {
-				log.Printf("Error sending email to %v: %v\n", email, err)
+				log.Printf("error sending email to %v: %v\n", email, err)
 				err = editResponse("⚠️ Error sending email :(")
 				if err != nil {
 					log.Println("failed to send interaction callback:", err)
@@ -89,7 +89,7 @@ func Verify(s *state.State, user discord.UserID, guild discord.GuildID, token st
 		if err != nil {
 			log.Println("")
 		} else {
-			msg = msg + "This email was in use by <@" + oldUser.String() + ">. They have been unverified.\n"
+			msg = msg + "Your email was also used to verify <@" + oldUser.String() + ">. That account has been unverified.\n"
 		}
 	}
 
