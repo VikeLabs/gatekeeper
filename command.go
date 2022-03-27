@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"log"
+	"strings"
 
 	"github.com/diamondburned/arikawa/v3/api"
 	"github.com/diamondburned/arikawa/v3/discord"
@@ -21,7 +22,7 @@ func Register(s *state.State, editResponse func(string) error, user discord.User
 	userID, ok := db.GetVerifiedEmail(email)
 
 	if ok && userID == user {
-		err := s.AddRole(guild, user, VerificationRole, api.AddRoleData{AuditLogReason: api.AuditLogReason("Gatekeeper verification")})
+		err := addVerifiedRole(s, guild, user)
 		return "welcome back, you are verified", err
 	}
 
@@ -38,7 +39,7 @@ func Register(s *state.State, editResponse func(string) error, user discord.User
 
 	body := formatRegistrationEmail(token)
 
-	// first, respond with some sort of "waiting..."
+	// first, respond with some sort of "sending..." message
 	// after that, send the email and edit the original message when we know if it succeeded
 	// the bot needs to respond immediately with something, otherwise it'll time out
 	defer func() {
@@ -74,31 +75,33 @@ func Verify(s *state.State, user discord.UserID, guild discord.GuildID, token st
 		return "Sorry, verification failed.", nil
 	}
 
-	oldUser, ok := db.GetVerifiedEmail(email)
-
-	if ok {
-		db.DeleteEmailToken(token)
-
-		return "Sorry, this email is already in use by <@" + oldUser.String() + ">. Please contact a moderator to be verified manually .", nil
-		// msg = msg + "This email was in use by <@" + oldUser.String() + ">. They will now be unverified."
-		// // TODO ==================================================
-		// oldMember :=
-		// if (s.Member(guild, oldUser))
-		// err = s.RemoveRole(guild, oldUser, VerificationRole, api.AuditLogReason("Gatekeeper verification"))
-		// if err != nil {
-		// 	return "", errors.Wrap(err, "cannot remove role from user")
-		// }
-	}
-
-	err = s.AddRole(guild, user, VerificationRole, api.AddRoleData{AuditLogReason: api.AuditLogReason("Gatekeeper verification")})
+	err = addVerifiedRole(s, guild, user)
 	if err != nil {
 		return "", err
 	}
 
+	msg += "Congrats! You've been verified!\n"
+
 	db.DeleteEmailToken(token)
 	db.SetVerifiedEmail(email, user)
 
-	msg += "\nCongrats! You've been verified!"
+	oldUser, ok := db.GetVerifiedEmail(email)
+	if ok {
+		err := removeVerifiedRole(s, guild, oldUser)
+		if err != nil {
+			log.Println("")
+		} else {
+			msg = msg + "This email was in use by <@" + oldUser.String() + ">. They have been unverified.\n"
+		}
+	}
 
-	return msg, nil
+	return strings.TrimSpace(msg), nil
+}
+
+func addVerifiedRole(s *state.State, guild discord.GuildID, user discord.UserID) error {
+	return s.AddRole(guild, user, VerificationRole, api.AddRoleData{AuditLogReason: api.AuditLogReason("Gatekeeper verification")})
+}
+
+func removeVerifiedRole(s *state.State, guild discord.GuildID, user discord.UserID) error {
+	return s.RemoveRole(guild, user, VerificationRole, api.AuditLogReason("Gatekeeper verification"))
 }
