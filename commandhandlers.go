@@ -66,7 +66,7 @@ var commandsGlobal = []Command{
 			email := options.Find("email")
 
 			editResponse := func(newContent string) error {
-				editedResponseData := api.EditInteractionResponseData{Content: option.NewNullableString("⚠️ Error sending email :(")}
+				editedResponseData := api.EditInteractionResponseData{Content: option.NewNullableString(newContent)}
 				_, err := s.EditInteractionResponse(e.AppID, e.Token, editedResponseData)
 				return err
 			}
