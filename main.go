@@ -23,6 +23,7 @@ func main() {
 	guildID := discord.GuildID(mustSnowflakeEnv("GUILD_ID"))
 	token := mustEnv("BOT_TOKEN")
 
+	// setup bot
 	s := state.New("Bot " + token)
 	s.AddIntents(gateway.IntentGuilds)
 
@@ -33,8 +34,10 @@ func main() {
 	}
 	defer s.Close()
 
+	// add application commands to guild
 	activeCommands := registerCommands(s, appID, guildID)
 
+	// setup cleanup channel for ctrl+c
 	// closing this unblocks
 	cleanup := make(chan struct{})
 	go func() {
@@ -52,11 +55,11 @@ func main() {
 	cleanupWaitGroup.Add(1)
 
 	// block until ctrl+c or kill
-	log.Println("blocking...")
+	log.Println("bot is running")
 	<-cleanup
 	log.Println("cleaning up")
 
-	// cleanup
+	// remove commands from guilds so people don't try and use the bot while it's down
 	cleanupCommands(s, activeCommands)
 
 	cleanupWaitGroup.Wait()
@@ -70,10 +73,10 @@ func registerCommands(s *state.State, appID discord.AppID, guildID discord.Guild
 		log.Fatalln("failed to get guild commands:", err)
 	}
 
+	// clear out existing commands in case the bot didn't clean up on last exit
 	for _, command := range existingCommands {
-		log.Println("Existing command", command.Name, "found.")
+		log.Printf("Removing existing command %v. The bot may have crashed last time.", command.Name)
 
-		// delete pre-existing commands for this bot (in case a cleanup failed or something)
 		if command.AppID == appID {
 			s.DeleteGuildCommand(appID, command.GuildID, command.ID)
 		}
@@ -82,11 +85,13 @@ func registerCommands(s *state.State, appID discord.AppID, guildID discord.Guild
 	// track commands so we can delete them on cleanup
 	activeCommands := make(map[string]*discord.Command)
 
+	// extract command definitions from command global variable
 	definitions := make([]api.CreateCommandData, 0, len(commandsGlobal))
 	for _, v := range commandsGlobal {
 		definitions = append(definitions, v.Data)
 	}
 
+	// register command definitions with discord
 	for _, command := range definitions {
 		newCmd, err := s.CreateGuildCommand(appID, guildID, command)
 		if err != nil {
@@ -95,6 +100,7 @@ func registerCommands(s *state.State, appID discord.AppID, guildID discord.Guild
 		activeCommands[command.Name] = newCmd
 
 		// TODO still not sure what to do about initial admin permissions
+		// https://discord.com/developers/docs/interactions/application-commands#application-command-permissions-object-guild-application-command-permissions-structure
 		// if command.NoDefaultPermission {
 		// 	s.EditCommandPermissions(appID, guildID, newCmd.ID, []discord.CommandPermissions{})
 		// }
