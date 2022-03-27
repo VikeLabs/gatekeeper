@@ -71,6 +71,9 @@ func Verify(s *state.State, user discord.UserID, guild discord.GuildID, token st
 		return "Sorry, verification failed.", nil
 	}
 
+	// we'll use to unverify the old user after verifying the new one
+	oldUser, hasOldUser := db.GetVerifiedEmail(email)
+
 	err = addVerifiedRole(s, guild, user)
 	if err != nil {
 		return "", err
@@ -81,8 +84,7 @@ func Verify(s *state.State, user discord.UserID, guild discord.GuildID, token st
 	db.DeleteEmailToken(token)
 	db.SetVerifiedEmail(email, user)
 
-	oldUser, ok := db.GetVerifiedEmail(email)
-	if ok {
+	if hasOldUser {
 		err := removeVerifiedRole(s, guild, oldUser)
 		if err != nil {
 			log.Println("")
