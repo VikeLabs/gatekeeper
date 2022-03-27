@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"github.com/diamondburned/arikawa/v3/api"
@@ -23,17 +24,47 @@ func main() {
 	token := mustEnv("BOT_TOKEN")
 
 	s := state.New("Bot " + token)
+	s.AddIntents(gateway.IntentGuilds)
 
 	s.AddHandler(MakeCommandHandlers(s, commandsGlobal))
-	s.AddIntents(gateway.IntentGuilds)
 
 	if err := s.Open(context.Background()); err != nil {
 		log.Fatalln("failed to open:", err)
 	}
 	defer s.Close()
 
-	log.Println("Gateway connected. Getting all guild commands.")
+	activeCommands := registerCommands(s, appID, guildID)
 
+	// closing this unblocks
+	cleanup := make(chan struct{})
+	go func() {
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+		<-sig
+		close(cleanup)
+	}()
+
+	// make this so all background goroutines can finish cleaning up
+	cleanupWaitGroup := &sync.WaitGroup{}
+
+	// db will flush right before we die
+	go PersistenceRoutine(cleanupWaitGroup, cleanup)
+	cleanupWaitGroup.Add(1)
+
+	// block until ctrl+c or kill
+	log.Println("blocking...")
+	<-cleanup
+	log.Println("cleaning up")
+
+	// cleanup
+	cleanupCommands(s, activeCommands)
+
+	cleanupWaitGroup.Wait()
+	log.Fatalln("exiting")
+}
+
+func registerCommands(s *state.State, appID discord.AppID, guildID discord.GuildID) map[string]*discord.Command {
+	log.Println("Gateway connected. Getting all guild commands.")
 	existingCommands, err := s.GuildCommands(appID, guildID)
 	if err != nil {
 		log.Fatalln("failed to get guild commands:", err)
@@ -69,35 +100,16 @@ func main() {
 		// }
 	}
 
-	wait := func() func() {
-		sigChan := make(chan os.Signal)
+	return activeCommands
+}
 
-		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
-		return func() {
-			<-sigChan
-		}
-	}()
-
-	cleanupPersistence := make(chan struct{})
-	go PersistenceRoutine(cleanupPersistence)
-
-	// block until ctrl+c or panic
-	log.Println("blocking...")
-	wait()
-	log.Println("cleaning up")
-
-	close(cleanupPersistence)
-
-	// cleanup
+func cleanupCommands(s *state.State, activeCommands map[string]*discord.Command) {
 	for name, cmd := range activeCommands {
 		err := s.DeleteGuildCommand(cmd.AppID, cmd.GuildID, cmd.ID)
 		if err != nil {
 			log.Println("couldn't delete command", name, "with id", cmd)
 		}
 	}
-
-	log.Fatalln("exiting")
 }
 
 func mustSnowflakeEnv(env string) discord.Snowflake {
