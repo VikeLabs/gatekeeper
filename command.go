@@ -26,10 +26,6 @@ func Register(s *state.State, editResponse func(string) error, user discord.User
 		return "welcome back, you are verified", err
 	}
 
-	if ok {
-		return "email is currently claimed by a user", nil
-	}
-
 	// create token
 	b := make([]byte, 4)
 	rand.Read(b)
