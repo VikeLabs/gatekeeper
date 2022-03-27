@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
+	"github.com/diamondburned/arikawa/v3/api"
 	"github.com/diamondburned/arikawa/v3/discord"
 	"github.com/diamondburned/arikawa/v3/gateway"
 	"github.com/diamondburned/arikawa/v3/state"
@@ -22,40 +23,76 @@ func main() {
 	guildID := discord.GuildID(mustSnowflakeEnv("GUILD_ID"))
 	token := mustEnv("BOT_TOKEN")
 
-	s, err := state.New("Bot " + token)
-	if err != nil {
-		log.Fatalln("Session failed:", err)
-		return
-	}
-
-	s.AddHandler(MakeCommandHandlers(s))
+	// setup bot
+	s := state.New("Bot " + token)
 	s.AddIntents(gateway.IntentGuilds)
+
+	s.AddHandler(MakeCommandHandlers(s, commandsGlobal))
 
 	if err := s.Open(context.Background()); err != nil {
 		log.Fatalln("failed to open:", err)
 	}
 	defer s.Close()
 
-	log.Println("Gateway connected. Getting all guild commands.")
+	// add application commands to guild
+	activeCommands := registerCommands(s, appID, guildID)
 
-	commands, err := s.GuildCommands(appID, guildID)
+	// setup cleanup channel for ctrl+c
+	// closing this unblocks
+	cleanup := make(chan struct{})
+	go func() {
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+		<-sig
+		close(cleanup)
+	}()
+
+	// make this so all background goroutines can finish cleaning up
+	cleanupWaitGroup := &sync.WaitGroup{}
+
+	// db will flush right before we die
+	go PersistenceRoutine(cleanupWaitGroup, cleanup)
+	cleanupWaitGroup.Add(1)
+
+	// block until ctrl+c or kill
+	log.Println("bot is running")
+	<-cleanup
+	log.Println("cleaning up")
+
+	// remove commands from guilds so people don't try and use the bot while it's down
+	cleanupCommands(s, activeCommands)
+
+	cleanupWaitGroup.Wait()
+	log.Println("exiting")
+}
+
+func registerCommands(s *state.State, appID discord.AppID, guildID discord.GuildID) map[string]*discord.Command {
+	log.Println("Gateway connected. Getting all guild commands.")
+	existingCommands, err := s.GuildCommands(appID, guildID)
 	if err != nil {
 		log.Fatalln("failed to get guild commands:", err)
 	}
 
-	for _, command := range commands {
-		log.Println("Existing command", command.Name, "found.")
+	// clear out existing commands in case the bot didn't clean up on last exit
+	for _, command := range existingCommands {
+		log.Printf("Removing existing command %v. The bot may have crashed last time.", command.Name)
 
-		// delete pre-existing commands for this bot (in case a cleanup failed or something)
 		if command.AppID == appID {
 			s.DeleteGuildCommand(appID, command.GuildID, command.ID)
 		}
 	}
 
 	// track commands so we can delete them on cleanup
-	activeCommands := map[string]*discord.Command{}
+	activeCommands := make(map[string]*discord.Command)
 
-	for _, command := range CommandDefinitions {
+	// extract command definitions from command global variable
+	definitions := make([]api.CreateCommandData, 0, len(commandsGlobal))
+	for _, v := range commandsGlobal {
+		definitions = append(definitions, v.Data)
+	}
+
+	// register command definitions with discord
+	for _, command := range definitions {
 		newCmd, err := s.CreateGuildCommand(appID, guildID, command)
 		if err != nil {
 			log.Fatalln("failed to create guild command:", err)
@@ -63,40 +100,22 @@ func main() {
 		activeCommands[command.Name] = newCmd
 
 		// TODO still not sure what to do about initial admin permissions
+		// https://discord.com/developers/docs/interactions/application-commands#application-command-permissions-object-guild-application-command-permissions-structure
 		// if command.NoDefaultPermission {
 		// 	s.EditCommandPermissions(appID, guildID, newCmd.ID, []discord.CommandPermissions{})
 		// }
 	}
 
-	wait := func() func() {
-		sigChan := make(chan os.Signal)
+	return activeCommands
+}
 
-		signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
-
-		return func() {
-			<-sigChan
-		}
-	}()
-
-	cleanupPersistence := make(chan struct{})
-	go PersistenceRoutine(cleanupPersistence)
-
-	// block until ctrl+c or panic
-	log.Println("blocking...")
-	wait()
-	log.Println("cleaning up")
-
-	close(cleanupPersistence)
-
-	// cleanup
+func cleanupCommands(s *state.State, activeCommands map[string]*discord.Command) {
 	for name, cmd := range activeCommands {
 		err := s.DeleteGuildCommand(cmd.AppID, cmd.GuildID, cmd.ID)
 		if err != nil {
 			log.Println("couldn't delete command", name, "with id", cmd)
 		}
 	}
-
-	fmt.Println("exiting")
 }
 
 func mustSnowflakeEnv(env string) discord.Snowflake {
@@ -110,7 +129,7 @@ func mustSnowflakeEnv(env string) discord.Snowflake {
 func mustEnv(name string) string {
 	s := os.Getenv(name)
 	if s == "" {
-		panic(fmt.Sprintln("No environment variable named", name))
+		log.Fatalln("No environment variable named", name)
 	}
 	return s
 }

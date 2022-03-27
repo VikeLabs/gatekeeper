@@ -1,6 +1,7 @@
 package main
 
 import (
+	"sync"
 	"time"
 
 	"github.com/diamondburned/arikawa/v3/discord"
@@ -15,7 +16,7 @@ type JSONDB struct {
 	VerifiedEmails map[string]discord.UserID `json:"verified_emails,omitempty"`
 }
 
-func PersistenceRoutine(kill <-chan struct{}) {
+func PersistenceRoutine(cleanedUp *sync.WaitGroup, kill <-chan struct{}) {
 	ticker := time.NewTicker(persistenceFrequency)
 	defer ticker.Stop()
 
@@ -25,6 +26,7 @@ func PersistenceRoutine(kill <-chan struct{}) {
 			db.Persist()
 		case <-kill:
 			db.Persist()
+			cleanedUp.Done()
 			return
 		}
 	}
