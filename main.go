@@ -63,7 +63,7 @@ func main() {
 	cleanupCommands(s, activeCommands)
 
 	cleanupWaitGroup.Wait()
-	log.Fatalln("exiting")
+	log.Println("exiting")
 }
 
 func registerCommands(s *state.State, appID discord.AppID, guildID discord.GuildID) map[string]*discord.Command {
