@@ -4,25 +4,30 @@ use serenity::async_trait;
 use serenity::model::gateway::Ready;
 use serenity::model::id::GuildId;
 use serenity::model::interactions::application_command::{
-    ApplicationCommandInteractionDataOptionValue, ApplicationCommandOptionType,
+    ApplicationCommandInteractionData, ApplicationCommandInteractionDataOptionValue,
+    ApplicationCommandOptionType,
 };
 use serenity::model::interactions::{Interaction, InteractionResponseType};
 use serenity::prelude::*;
 
 struct Handler;
 
+fn unwrap_appcmd_param(
+    data: &ApplicationCommandInteractionData,
+    param: String,
+) -> Option<ApplicationCommandInteractionDataOptionValue> {
+    data.options
+        .iter()
+        .find(|x| x.name == param)?
+        .clone()
+        .resolved
+}
+
 #[async_trait]
 impl EventHandler for Handler {
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         if let Interaction::ApplicationCommand(cmd) = interaction {
-            let content = cmd
-                .data
-                .options
-                .iter()
-                .find(|x| x.name == "content")
-                .expect("missing content field")
-                .clone()
-                .resolved
+            let content = unwrap_appcmd_param(&cmd.data, "content".to_string())
                 .expect("should have content value");
 
             let content = match content {
