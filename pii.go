@@ -51,10 +51,12 @@ func MakeIdentifier(guild discord.GuildID, email string) (Identifier, error) {
 }
 
 // for use as a value or map key in JSON
-var _ encoding.TextMarshaler = Identifier{}
-var _ encoding.TextUnmarshaler = Identifier{}
+// https://pkg.go.dev/encoding/json#Marshal
+// https://pkg.go.dev/encoding/json#Unmarshal
+var _ encoding.TextMarshaler = Identifier{}    // must be value (for write)
+var _ encoding.TextUnmarshaler = &Identifier{} // must be pointer (for read)
 
-func (i Identifier) UnmarshalText(b []byte) error {
+func (i *Identifier) UnmarshalText(b []byte) error {
 	n, err := base64.StdEncoding.Decode(i[:], b)
 	if err != nil {
 		return err
