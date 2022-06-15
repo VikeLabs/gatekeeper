@@ -11,16 +11,16 @@ import (
 
 type DB struct {
 	EmailTokens struct {
-		D map[string]string
+		D map[string]Identifier
 		M sync.Mutex
 	}
 	VerifiedEmails struct {
-		D map[string]discord.UserID
+		D map[Identifier]discord.UserID
 		M sync.Mutex
 	}
 }
 
-func (d *DB) GetEmailToken(token string) (string, bool) {
+func (d *DB) GetEmailToken(token string) (Identifier, bool) {
 	d.EmailTokens.M.Lock()
 	defer d.EmailTokens.M.Unlock()
 
@@ -28,7 +28,7 @@ func (d *DB) GetEmailToken(token string) (string, bool) {
 	return email, ok
 }
 
-func (d *DB) SetEmailToken(email, token string) {
+func (d *DB) SetEmailToken(email Identifier, token string) {
 	d.EmailTokens.M.Lock()
 	defer d.EmailTokens.M.Unlock()
 
@@ -41,15 +41,15 @@ func (d *DB) DeleteEmailToken(token string) {
 	delete(d.EmailTokens.D, token)
 }
 
-func (d *DB) GetVerifiedEmail(token string) (discord.UserID, bool) {
+func (d *DB) GetVerifiedEmail(email Identifier) (discord.UserID, bool) {
 	d.VerifiedEmails.M.Lock()
 	defer d.VerifiedEmails.M.Unlock()
 
-	id, ok := d.VerifiedEmails.D[token]
+	id, ok := d.VerifiedEmails.D[email]
 	return id, ok
 }
 
-func (d *DB) SetVerifiedEmail(email string, id discord.UserID) {
+func (d *DB) SetVerifiedEmail(email Identifier, id discord.UserID) {
 	d.VerifiedEmails.M.Lock()
 	defer d.VerifiedEmails.M.Unlock()
 
@@ -96,7 +96,7 @@ func (d *DB) Load() {
 	if jsonDB.EmailTokens != nil {
 		d.EmailTokens.D = jsonDB.EmailTokens
 	} else {
-		d.EmailTokens.D = map[string]string{}
+		d.EmailTokens.D = map[string]Identifier{}
 	}
 	d.EmailTokens.M.Unlock()
 
@@ -104,7 +104,7 @@ func (d *DB) Load() {
 	if jsonDB.VerifiedEmails != nil {
 		d.VerifiedEmails.D = jsonDB.VerifiedEmails
 	} else {
-		d.VerifiedEmails.D = map[string]discord.UserID{}
+		d.VerifiedEmails.D = map[Identifier]discord.UserID{}
 	}
 	d.VerifiedEmails.M.Unlock()
 
@@ -113,11 +113,11 @@ func (d *DB) Load() {
 
 var db = DB{
 	EmailTokens: struct {
-		D map[string]string
+		D map[string]Identifier
 		M sync.Mutex
-	}{D: map[string]string{}},
+	}{D: map[string]Identifier{}},
 	VerifiedEmails: struct {
-		D map[string]discord.UserID
+		D map[Identifier]discord.UserID
 		M sync.Mutex
-	}{D: map[string]discord.UserID{}},
+	}{D: map[Identifier]discord.UserID{}},
 }

@@ -19,7 +19,11 @@ func Register(s *state.State, editResponse func(string) error, user discord.User
 		return err.Error(), nil
 	}
 
-	userID, ok := db.GetVerifiedEmail(email)
+	hashedEmail, err := MakeIdentifier(guild, email)
+	if err != nil {
+		log.Println("failed making an identifier from the email:", err)
+	}
+	userID, ok := db.GetVerifiedEmail(hashedEmail)
 
 	if ok && userID == user {
 		err := addVerifiedRole(s, guild, user)
@@ -31,7 +35,7 @@ func Register(s *state.State, editResponse func(string) error, user discord.User
 	rand.Read(b)
 	token := hex.EncodeToString(b)
 
-	db.SetEmailToken(email, token)
+	db.SetEmailToken(hashedEmail, token)
 
 	body := formatRegistrationEmail(token)
 
@@ -87,7 +91,8 @@ func Verify(s *state.State, user discord.UserID, guild discord.GuildID, token st
 	if hasOldUser {
 		err := removeVerifiedRole(s, guild, oldUser)
 		if err != nil {
-			log.Println("")
+			oldUser, _ := s.User(oldUser)
+			log.Println("error removing verified user:", oldUser.Username+"#"+oldUser.Discriminator)
 		} else {
 			msg = msg + "Your email was also used to verify <@" + oldUser.String() + ">. That account has been unverified.\n"
 		}

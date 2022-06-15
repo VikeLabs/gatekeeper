@@ -12,8 +12,8 @@ const persistenceFrequency = time.Second * 10
 var dbFilename = mustEnv("DB_FILENAME")
 
 type JSONDB struct {
-	EmailTokens    map[string]string         `json:"email_tokens,omitempty"`
-	VerifiedEmails map[string]discord.UserID `json:"verified_emails,omitempty"`
+	EmailTokens    map[string]Identifier         `json:"email_tokens,omitempty"`
+	VerifiedEmails map[Identifier]discord.UserID `json:"verified_emails,omitempty"`
 }
 
 func PersistenceRoutine(cleanedUp *sync.WaitGroup, kill <-chan struct{}) {
