@@ -110,6 +110,48 @@ var commandsGlobal = []Command{
 			return makeEphemeralResponse(msg)
 		},
 	},
+
+	{
+		Data: api.CreateCommandData{
+			Name:        "ban",
+			Description: "Unverify a user and block their email from verifying",
+			Type:        discord.ChatInputCommand,
+			Options: []discord.CommandOption{
+				&discord.UserOption{
+					OptionName:  "user",
+					Description: "The user to be banned",
+					Required:    true,
+				},
+			},
+		},
+		Handler: func(s *state.State, e *gateway.InteractionCreateEvent, options discord.CommandInteractionOptions) *api.InteractionResponse {
+			user, err := options.Find("user").SnowflakeValue()
+			if err != nil {
+				log.Println("error parsing user:", err)
+				return makeEphemeralResponse("Sorry, an error has occurred")
+			}
+
+			msg, err := Ban(s, discord.UserID(user), e.GuildID)
+			if err != nil {
+				log.Println("ban error:", err)
+				return makeEphemeralResponse("Sorry, an error has occurred") // TODO cleanup potential
+			}
+			return makeEphemeralResponse(msg)
+		},
+	},
+
+	// // COPY ME
+	// {
+	// 	Data: api.CreateCommandData{
+	// 		Name:        "",
+	// 		Description: "",
+	// 		Type:        discord.ChatInputCommand,
+	// 		Options:     []discord.CommandOption{},
+	// 	},
+	// 	Handler: func(s *state.State, e *gateway.InteractionCreateEvent, options discord.CommandInteractionOptions) *api.InteractionResponse {
+	// 		return makeEphemeralResponse("TODO")
+	// 	},
+	// },
 }
 
 func makeEphemeralResponse(msg string) *api.InteractionResponse {

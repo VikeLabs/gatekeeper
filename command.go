@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"log"
 	"strings"
 
@@ -75,6 +76,11 @@ func Verify(s *state.State, user discord.UserID, guild discord.GuildID, token st
 		return "Sorry, verification failed.", nil
 	}
 
+	// put ban check after verification to prevent banned email enumeration
+	if db.IsBanned(email) {
+		return "You have been banned and are unable to verify.", nil
+	}
+
 	// we'll use to unverify the old user after verifying the new one
 	oldUser, hasOldUser := db.GetVerifiedEmail(email)
 
@@ -107,4 +113,20 @@ func addVerifiedRole(s *state.State, guild discord.GuildID, user discord.UserID)
 
 func removeVerifiedRole(s *state.State, guild discord.GuildID, user discord.UserID) error {
 	return s.RemoveRole(guild, user, VerificationRole, api.AuditLogReason("Gatekeeper verification"))
+}
+
+func Ban(s *state.State, user discord.UserID, guild discord.GuildID) (string, error) {
+	email, ok := db.GetUserEmail(user)
+	if !ok {
+		return fmt.Sprintf("Error: user <@%v> not verified", user), nil
+	}
+	db.BanEmail(email)
+
+	err := removeVerifiedRole(s, guild, user)
+	if err != nil {
+		return "", err
+	}
+	db.DeleteVerifiedEmail(email)
+
+	return fmt.Sprintf("Success! User <@%v> was banned.", user), nil
 }

@@ -14,6 +14,7 @@ var dbFilename = mustEnv("DB_FILENAME")
 type JSONDB struct {
 	EmailTokens    map[string]Identifier         `json:"email_tokens,omitempty"`
 	VerifiedEmails map[Identifier]discord.UserID `json:"verified_emails,omitempty"`
+	BannedEmails   map[Identifier]bool           `json:"banned_emails,omitempty"`
 }
 
 func PersistenceRoutine(cleanedUp *sync.WaitGroup, kill <-chan struct{}) {
