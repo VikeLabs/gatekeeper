@@ -2,7 +2,7 @@ package main
 
 import (
 	"crypto/rand"
-	"encoding/hex"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"strings"
@@ -32,9 +32,9 @@ func Register(s *state.State, editResponse func(string) error, user discord.User
 	}
 
 	// create token
-	b := make([]byte, 4)
+	b := make([]byte, 8)
 	rand.Read(b)
-	token := hex.EncodeToString(b)
+	token := base64.RawStdEncoding.EncodeToString(b)
 
 	db.SetEmailToken(hashedEmail, token)
 
@@ -54,7 +54,8 @@ func Register(s *state.State, editResponse func(string) error, user discord.User
 				}
 				return
 			} else {
-				responseText := "✅ An email has been sent to " + email + "\nPlease use /verify <token> to verify your email address."
+				const format = "✅ An email has been sent to %v\nPlease use /verify <token> to verify your email address."
+				responseText := fmt.Sprintf(format, email)
 				err = editResponse(responseText)
 				if err != nil {
 					log.Println("failed to send interaction callback:", err)
@@ -66,14 +67,17 @@ func Register(s *state.State, editResponse func(string) error, user discord.User
 }
 
 func formatRegistrationEmail(token string) string {
-	return ("Greetings from Gatekeeper!\n\n" +
-		"Your verification token is: " + token)
+	return fmt.Sprintf(
+		"Greetings from Gatekeeper!\n\n"+
+			"Your verification token is: %v", token)
 }
 
-func Verify(s *state.State, user discord.UserID, guild discord.GuildID, token string) (msg string, err error) {
+func Verify(s *state.State, user discord.UserID, guild discord.GuildID, token string) (string, error) {
+	msg := &strings.Builder{}
+
 	email, ok := db.GetEmailToken(token)
 	if !ok {
-		return "Sorry, verification failed.", nil
+		return "Your token is incorrect.", nil
 	}
 
 	// put ban check after verification to prevent banned email enumeration
@@ -84,12 +88,12 @@ func Verify(s *state.State, user discord.UserID, guild discord.GuildID, token st
 	// we'll use to unverify the old user after verifying the new one
 	oldUser, hasOldUser := db.GetVerifiedEmail(email)
 
-	err = addVerifiedRole(s, guild, user)
+	err := addVerifiedRole(s, guild, user)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("couldn't verify user: %w", err)
 	}
 
-	msg += "Congrats! You've been verified!\n"
+	msg.WriteString("Congrats! You've been verified!\n")
 
 	db.DeleteEmailToken(token)
 	db.SetVerifiedEmail(email, user)
@@ -100,11 +104,11 @@ func Verify(s *state.State, user discord.UserID, guild discord.GuildID, token st
 			oldUser, _ := s.User(oldUser)
 			log.Println("error removing verified user:", oldUser.Username+"#"+oldUser.Discriminator)
 		} else {
-			msg = msg + "Your email was also used to verify <@" + oldUser.String() + ">. That account has been unverified.\n"
+			fmt.Fprintf(msg, "Your email was also used to verify <@%v>. That account has been unverified.\n", oldUser)
 		}
 	}
 
-	return strings.TrimSpace(msg), nil
+	return strings.TrimSpace(msg.String()), nil
 }
 
 func addVerifiedRole(s *state.State, guild discord.GuildID, user discord.UserID) error {
@@ -124,7 +128,7 @@ func Ban(s *state.State, user discord.UserID, guild discord.GuildID) (string, er
 
 	err := removeVerifiedRole(s, guild, user)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("couldn't unverify user: %w", err)
 	}
 	db.DeleteVerifiedEmail(email)
 

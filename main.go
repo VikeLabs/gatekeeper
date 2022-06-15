@@ -21,7 +21,7 @@ func init() {
 func main() {
 	appID := discord.AppID(mustSnowflakeEnv("APP_ID"))
 	guildID := discord.GuildID(mustSnowflakeEnv("GUILD_ID"))
-	token := mustEnv("BOT_TOKEN")
+	token := mustEnv("DISCORD_TOKEN")
 
 	// setup bot
 	s := state.New("Bot " + token)
@@ -98,12 +98,6 @@ func registerCommands(s *state.State, appID discord.AppID, guildID discord.Guild
 			log.Fatalln("failed to create guild command:", err)
 		}
 		activeCommands[command.Name] = newCmd
-
-		// TODO still not sure what to do about initial admin permissions
-		// https://discord.com/developers/docs/interactions/application-commands#application-command-permissions-object-guild-application-command-permissions-structure
-		// if command.NoDefaultPermission {
-		// 	s.EditCommandPermissions(appID, guildID, newCmd.ID, []discord.CommandPermissions{})
-		// }
 	}
 
 	return activeCommands

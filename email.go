@@ -12,8 +12,8 @@ import (
 const smtpHost = "smtp.gmail.com"
 const smtpPort = 587
 
-var botEmail = mustEnv("BOT_EMAIL")
-var botPassword = mustEnv("BOT_PASSWORD")
+var botEmail = mustEnv("GMAIL_EMAIL")
+var botPassword = mustEnv("GMAIL_PASSWORD")
 
 var emailDialer = gomail.NewDialer(smtpHost, smtpPort, botEmail, botPassword)
 

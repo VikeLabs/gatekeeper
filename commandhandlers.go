@@ -75,7 +75,7 @@ var commandsGlobal = []Command{
 			msg, err := Register(s, editResponse, e.SenderID(), e.GuildID, strings.TrimSpace(strings.ToLower(email.String())))
 			if err != nil {
 				log.Println("registration error:", err)
-				return makeEphemeralResponse("Sorry, an error has occurred")
+				return errorResponse
 			}
 			return makeEphemeralResponse(msg)
 		},
@@ -105,7 +105,7 @@ var commandsGlobal = []Command{
 			msg, err := Verify(s, e.SenderID(), e.GuildID, strings.TrimSpace(token.String()))
 			if err != nil {
 				log.Println("verification error:", err)
-				return makeEphemeralResponse("Sorry, an error has occurred")
+				return errorResponse
 			}
 			return makeEphemeralResponse(msg)
 		},
@@ -134,7 +134,7 @@ var commandsGlobal = []Command{
 			msg, err := Ban(s, discord.UserID(user), e.GuildID)
 			if err != nil {
 				log.Println("ban error:", err)
-				return makeEphemeralResponse("Sorry, an error has occurred") // TODO cleanup potential
+				return errorResponse
 			}
 			return makeEphemeralResponse(msg)
 		},
@@ -153,6 +153,8 @@ var commandsGlobal = []Command{
 	// 	},
 	// },
 }
+
+var errorResponse = makeEphemeralResponse("Sorry, an error has occurred")
 
 func makeEphemeralResponse(msg string) *api.InteractionResponse {
 	return &api.InteractionResponse{
