@@ -12,10 +12,16 @@ import (
 	"github.com/diamondburned/arikawa/v3/discord"
 	"github.com/diamondburned/arikawa/v3/gateway"
 	"github.com/diamondburned/arikawa/v3/state"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 func init() {
-	db.Load()
+	var err error
+
+	db, err = InitDB()
+	if err != nil {
+		log.Fatalln(err)
+	}
 }
 
 func main() {
@@ -50,17 +56,26 @@ func main() {
 	// make this so all background goroutines can finish cleaning up
 	cleanupWaitGroup := &sync.WaitGroup{}
 
-	// db will flush right before we die
-	go PersistenceRoutine(cleanupWaitGroup, cleanup)
-	cleanupWaitGroup.Add(1)
-
 	// block until ctrl+c or kill
 	log.Println("bot is running")
 	<-cleanup
 	log.Println("cleaning up")
 
-	// remove commands from guilds so people don't try and use the bot while it's down
-	cleanupCommands(s, activeCommands)
+	cleanupWaitGroup.Add(1)
+	go func() {
+		// remove commands from guilds so people don't try and use the bot while it's down
+		cleanupCommands(s, activeCommands)
+		cleanupWaitGroup.Done()
+	}()
+
+	cleanupWaitGroup.Add(1)
+	go func() {
+		err := db.db.Close()
+		if err != nil {
+			log.Println("error closing db:", err)
+		}
+		cleanupWaitGroup.Done()
+	}()
 
 	cleanupWaitGroup.Wait()
 	log.Println("exiting")

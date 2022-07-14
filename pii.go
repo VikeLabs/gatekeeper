@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"fmt"
+	"io"
 
 	"github.com/diamondburned/arikawa/v3/discord"
 	"golang.org/x/crypto/argon2"
@@ -69,4 +70,15 @@ func (i *Identifier) UnmarshalText(b []byte) error {
 
 func (i Identifier) MarshalText() ([]byte, error) {
 	return []byte(base64.StdEncoding.EncodeToString(i[:])), nil
+}
+
+// for parsing from a []byte
+var _ io.Writer = &Identifier{}
+
+func (i *Identifier) Write(p []byte) (n int, err error) {
+	if len(p) != len(i) {
+		return 0, fmt.Errorf("bytes should have length %v", len(i))
+	}
+	n = copy(i[:], p)
+	return
 }
