@@ -128,10 +128,43 @@ var commandsGlobal = []Command{
 			user, err := options.Find("user").SnowflakeValue()
 			if err != nil {
 				log.Println("error parsing user:", err)
-				return makeEphemeralResponse("Sorry, an error has occurred")
+				return errorResponse
 			}
 
 			msg, err := Ban(s, discord.UserID(user), e.GuildID)
+			if err != nil {
+				log.Println("ban error:", err)
+				return errorResponse
+			}
+			return makeEphemeralResponse(msg)
+		},
+	},
+	{
+		Data: api.CreateCommandData{
+			Name:        "config",
+			Description: "Configure the verification channel and role",
+			Type:        discord.ChatInputCommand,
+			Options: []discord.CommandOption{
+				&discord.StringOption{
+					OptionName:  "domain",
+					Description: "The domain to filter emails by (for example, gmail.com)",
+					Required:    true,
+				},
+				&discord.RoleOption{
+					OptionName:  "role",
+					Description: "The role that Gatekeeper gives to verified users",
+					Required:    true,
+				},
+			},
+		},
+		Handler: func(s *state.State, e *gateway.InteractionCreateEvent, options discord.CommandInteractionOptions) *api.InteractionResponse {
+			domain := options.Find("domain").String()
+			role, err := options.Find("role").SnowflakeValue()
+			if err != nil {
+				log.Println("error parsing role:", err)
+				return errorResponse
+			}
+			msg, err := Config(s, e.GuildID, domain, discord.RoleID(role))
 			if err != nil {
 				log.Println("ban error:", err)
 				return errorResponse

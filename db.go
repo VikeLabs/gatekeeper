@@ -7,6 +7,7 @@ import (
 	"encoding/base32"
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/diamondburned/arikawa/v3/discord"
 )
@@ -173,4 +174,67 @@ func (d *DB) IsBanned(id Identifier) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func truncateDomain(domain string) []byte {
+	domainBytes := []byte(domain)
+	if len(domainBytes) > 255 {
+		domainBytes = domainBytes[:255]
+	}
+	return domainBytes
+}
+
+func (d *DB) MakeConfig(guild discord.GuildID, domain string, role discord.RoleID) error {
+	log.Println("calling makeconfig")
+	domainBytes := truncateDomain(domain)
+	s := "INSERT INTO config (guild, email_domain, verification_role) VALUES ($1,$2,$3)"
+	_, err := d.db.Exec(s, guild, domainBytes, role)
+	return err
+}
+
+func (d *DB) UpdateConfig(guild discord.GuildID, domain string, role discord.RoleID) error {
+	log.Println("calling updateconfig with", domain)
+	domainBytes := truncateDomain(domain)
+	s := "UPDATE config SET email_domain = $1, verification_role = $2 WHERE guild = $3"
+	_, err := d.db.Exec(s, domainBytes, role, guild)
+	return err
+}
+
+func (d *DB) HasConfig(guild discord.GuildID) (bool, error) {
+	s := "SELECT guild FROM config WHERE guild = $1"
+	row := d.db.QueryRow(s, guild)
+	var tmp discord.GuildID
+	err := row.Scan(&tmp)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (d *DB) EmailDomain(guild discord.GuildID) (string, bool, error) {
+	s := "SELECT email_domain FROM config WHERE guild = $1"
+	row := d.db.QueryRow(s, guild)
+	var domain []byte
+	err := row.Scan(&domain)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	} else if err != nil {
+		return "", false, err
+	}
+	return string(domain), true, nil
+}
+
+func (d *DB) VerificationRole(guild discord.GuildID) (discord.RoleID, bool, error) {
+	s := "SELECT verification_role FROM config WHERE guild = $1"
+	row := d.db.QueryRow(s, guild)
+	var role discord.RoleID
+	err := row.Scan(&role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return discord.NullRoleID, false, nil
+	} else if err != nil {
+		return discord.NullRoleID, false, err
+	}
+	return role, true, nil
 }

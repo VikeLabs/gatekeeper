@@ -32,15 +32,15 @@ func emailifyNewlines(in string) string {
 	return strings.ReplaceAll(in, "\n", "\r\n")
 }
 
-func validateEmail(email string) error {
+func validateEmail(domain, email string) error {
 	address, err := mail.ParseAddress(email)
 	if err != nil {
 		return fmt.Errorf("email address format is invalid")
 	}
 
 	// is it the correct email domain?
-	if !strings.HasSuffix(address.Address, "@"+EmailDomain) {
-		return fmt.Errorf("email address must be a valid %s domain email address", EmailDomain)
+	if !strings.HasSuffix(address.Address, "@"+domain) {
+		return fmt.Errorf("email address must be a valid %s domain email address", domain)
 	}
 
 	// is it not an alias email address?

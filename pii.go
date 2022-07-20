@@ -16,17 +16,13 @@ const IdentifierLength = 32
 
 type Identifier [IdentifierLength]byte
 
+// email should already be validated
 func MakeIdentifier(guild discord.GuildID, email string) (Identifier, error) {
 	// these parameters were recommended by the docs for argon2.IDKey
 	// https://pkg.go.dev/golang.org/x/crypto/argon2#IDKey
 	const argon2Time = 1
 	const argon2Mem = 64 * (1 << 10) // 64MB
 	const argon2Threads = 1          // one thread cause portability i guess
-
-	err := validateEmail(email)
-	if err != nil {
-		return Identifier{}, err
-	}
 
 	guildBytes := new(bytes.Buffer)
 	binary.Write(guildBytes, binary.BigEndian, uint64(guild))
