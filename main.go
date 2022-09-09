@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -26,7 +27,6 @@ func init() {
 
 func main() {
 	appID := discord.AppID(mustSnowflakeEnv("APP_ID"))
-	guildID := discord.GuildID(mustSnowflakeEnv("GUILD_ID"))
 	token := mustEnv("DISCORD_TOKEN")
 
 	// setup bot
@@ -35,13 +35,25 @@ func main() {
 
 	s.AddHandler(MakeCommandHandlers(s, commandsGlobal))
 
+	// executed when either you join a guild or when the bot starts
+	// https://discord.com/developers/docs/topics/gateway#guilds
+	s.AddHandler(func(e *gateway.GuildCreateEvent) {
+		// TODO add a better option for whether to clobber old commands
+		guild := e.Guild.ID
+		if _, ok := os.LookupEnv("CLOBBER_CMDS"); ok {
+			cmds, err := s.Commands(appID)
+			if err != nil {
+				log.Println("error getting commands:", err)
+			}
+			removeCommands(s, guild, cmds)
+		}
+		registerCommands(s, appID, guild)
+	})
+
 	if err := s.Open(context.Background()); err != nil {
 		log.Fatalln("failed to open:", err)
 	}
 	defer s.Close()
-
-	// add application commands to guild
-	activeCommands := registerCommands(s, appID, guildID)
 
 	// setup cleanup channel for ctrl+c
 	// closing this unblocks
@@ -61,12 +73,12 @@ func main() {
 	<-cleanup
 	log.Println("cleaning up")
 
-	cleanupWaitGroup.Add(1)
-	go func() {
-		// remove commands from guilds so people don't try and use the bot while it's down
-		cleanupCommands(s, activeCommands)
-		cleanupWaitGroup.Done()
-	}()
+	// cleanupWaitGroup.Add(1)
+	// go func() {
+	// 	// remove commands from guilds so people don't try and use the bot while it's down
+	// 	cleanupCommands(s, activeCommands)
+	// 	cleanupWaitGroup.Done()
+	// }()
 
 	cleanupWaitGroup.Add(1)
 	go func() {
@@ -81,25 +93,7 @@ func main() {
 	log.Println("exiting")
 }
 
-func registerCommands(s *state.State, appID discord.AppID, guildID discord.GuildID) map[string]*discord.Command {
-	log.Println("Gateway connected. Getting all guild commands.")
-	existingCommands, err := s.GuildCommands(appID, guildID)
-	if err != nil {
-		log.Fatalln("failed to get guild commands:", err)
-	}
-
-	// clear out existing commands in case the bot didn't clean up on last exit
-	for _, command := range existingCommands {
-		log.Printf("Removing existing command %v. The bot may have crashed last time.", command.Name)
-
-		if command.AppID == appID {
-			s.DeleteGuildCommand(appID, command.GuildID, command.ID)
-		}
-	}
-
-	// track commands so we can delete them on cleanup
-	activeCommands := make(map[string]*discord.Command)
-
+func registerCommands(s *state.State, appID discord.AppID, guildID discord.GuildID) error {
 	// extract command definitions from command global variable
 	definitions := make([]api.CreateCommandData, 0, len(commandsGlobal))
 	for _, v := range commandsGlobal {
@@ -108,21 +102,24 @@ func registerCommands(s *state.State, appID discord.AppID, guildID discord.Guild
 
 	// register command definitions with discord
 	for _, command := range definitions {
-		newCmd, err := s.CreateGuildCommand(appID, guildID, command)
+		_, err := s.CreateGuildCommand(appID, guildID, command)
 		if err != nil {
-			log.Fatalln("failed to create guild command:", err)
+			return fmt.Errorf("failed to create guild command: %w", err)
 		}
-		activeCommands[command.Name] = newCmd
 	}
 
-	return activeCommands
+	return nil
 }
 
-func cleanupCommands(s *state.State, activeCommands map[string]*discord.Command) {
-	for name, cmd := range activeCommands {
-		err := s.DeleteGuildCommand(cmd.AppID, cmd.GuildID, cmd.ID)
+func removeCommands(s *state.State, guild discord.GuildID, activeCommands []discord.Command) {
+	for _, cmd := range activeCommands {
+		// only remove commands from current guild
+		if cmd.GuildID != guild {
+			continue
+		}
+		err := s.DeleteGuildCommand(cmd.AppID, guild, cmd.ID)
 		if err != nil {
-			log.Println("couldn't delete command", name, "with id", cmd)
+			log.Println("couldn't delete command", cmd.Name, "with id", cmd)
 		}
 	}
 }

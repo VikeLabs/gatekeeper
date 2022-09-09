@@ -7,7 +7,6 @@ import (
 	"encoding/base32"
 	"errors"
 	"fmt"
-	"log"
 
 	"github.com/diamondburned/arikawa/v3/discord"
 )
@@ -65,9 +64,13 @@ func InitDB() (DB, error) {
 	return DB{db: dbConn}, nil
 }
 
-func (d *DB) GetEmailToken(token Token) (Identifier, bool, error) {
-	s := "SELECT identifier FROM token WHERE token = $1"
-	row := d.db.QueryRow(s, token[:])
+// NOTE: positional arguments like $1, $2 ignore the number, so "$2, $1" behaves
+// the same as "$1, $2". I think this is SQLite behaviour, but keep it for
+// Postgres compatibility
+
+func (d *DB) GetEmailToken(guild discord.GuildID, token Token) (Identifier, bool, error) {
+	s := "SELECT identifier FROM token WHERE token = $1 AND guild = $2"
+	row := d.db.QueryRow(s, token[:], guild)
 
 	var idBuf []byte
 	err := row.Scan(&idBuf)
@@ -87,21 +90,21 @@ func (d *DB) GetEmailToken(token Token) (Identifier, bool, error) {
 	return id, true, nil
 }
 
-func (d *DB) SetEmailToken(email Identifier, token Token) error {
-	s := "INSERT INTO token (token, identifier) VALUES ($1,$2)"
-	_, err := d.db.Exec(s, token[:], email[:])
+func (d *DB) SetEmailToken(guild discord.GuildID, email Identifier, token Token) error {
+	s := "INSERT INTO token (guild, token, identifier) VALUES ($1,$2,$3)"
+	_, err := d.db.Exec(s, guild, token[:], email[:])
 	return err
 }
 
-func (d *DB) DeleteEmailToken(token Token) error {
-	s := "DELETE FROM token WHERE token = $1"
-	_, err := d.db.Exec(s, token[:])
+func (d *DB) DeleteEmailToken(guild discord.GuildID, token Token) error {
+	s := "DELETE FROM token WHERE token = $1 AND guild = $2"
+	_, err := d.db.Exec(s, token[:], guild)
 	return err
 }
 
-func (d *DB) GetVerifiedEmail(id Identifier) (discord.UserID, bool, error) {
-	s := "SELECT user FROM verified WHERE identifier = $1"
-	row := d.db.QueryRow(s, id[:])
+func (d *DB) GetVerifiedEmail(guild discord.GuildID, id Identifier) (discord.UserID, bool, error) {
+	s := "SELECT user FROM verified WHERE identifier = $1 AND guild = $2"
+	row := d.db.QueryRow(s, id[:], guild)
 
 	var user discord.UserID
 	err := row.Scan(&user)
@@ -115,26 +118,27 @@ func (d *DB) GetVerifiedEmail(id Identifier) (discord.UserID, bool, error) {
 	return user, true, nil
 }
 
-func (d *DB) SetVerifiedEmail(id Identifier, user discord.UserID) error {
-	s := "INSERT INTO verified (identifier, user) VALUES ($1,$2)"
-	_, err := d.db.Exec(s, id[:], user)
+func (d *DB) SetVerifiedEmail(guild discord.GuildID, id Identifier, user discord.UserID) error {
+	s := "INSERT INTO verified (guild, identifier, user) VALUES ($1,$2,$3)"
+	_, err := d.db.Exec(s, guild, id[:], user)
 	return err
 }
 
-func (d *DB) DeleteVerifiedEmail(id Identifier) error {
-	s := "DELETE FROM verified WHERE identifier = $1"
-	_, err := d.db.Exec(s, id[:])
+func (d *DB) DeleteVerifiedEmail(guild discord.GuildID, id Identifier) error {
+	s := "DELETE FROM verified WHERE identifier = $1 AND guild = $2"
+	_, err := d.db.Exec(s, id[:], guild)
 	return err
 }
 
-func (d *DB) DeleteVerifiedUser(user discord.UserID) error {
-	s := "DELETE FROM verified WHERE user = $1"
-	_, err := d.db.Exec(s, user)
+func (d *DB) DeleteVerifiedUser(guild discord.GuildID, user discord.UserID) error {
+	s := "DELETE FROM verified WHERE user = $1 AND guild = $2"
+	_, err := d.db.Exec(s, user, guild)
 	return err
 }
 
-func (d *DB) GetUserEmail(user discord.UserID) (Identifier, bool, error) {
-	row := d.db.QueryRow("SELECT identifier FROM verified WHERE user = $1", user)
+func (d *DB) GetUserEmail(guild discord.GuildID, user discord.UserID) (Identifier, bool, error) {
+	s := "SELECT identifier FROM verified WHERE user = $1 AND guild = $2"
+	row := d.db.QueryRow(s, user, guild)
 
 	var idBuf []byte
 	err := row.Scan(&idBuf)
@@ -154,18 +158,21 @@ func (d *DB) GetUserEmail(user discord.UserID) (Identifier, bool, error) {
 	return id, true, err
 }
 
-func (d *DB) BanEmail(id Identifier) error {
-	_, err := d.db.Exec("INSERT INTO banned (identifier) VALUES ($1)", id[:])
+func (d *DB) BanEmail(guild discord.GuildID, id Identifier) error {
+	s := "INSERT INTO banned (guild, identifier) VALUES ($1,$2)"
+	_, err := d.db.Exec(s, guild, id[:])
 	return err
 }
 
-func (d *DB) UnbanEmail(id Identifier) error {
-	_, err := d.db.Exec("DELETE FROM banned WHERE identifier = $1", id[:])
+func (d *DB) UnbanEmail(guild discord.GuildID, id Identifier) error {
+	s := "DELETE FROM banned WHERE identifier = $1 AND guild = $2"
+	_, err := d.db.Exec(s, id[:], guild)
 	return err
 }
 
-func (d *DB) IsBanned(id Identifier) (bool, error) {
-	row := d.db.QueryRow("SELECT identifier FROM banned WHERE identifier = $1", id[:])
+func (d *DB) IsBanned(guild discord.GuildID, id Identifier) (bool, error) {
+	s := "SELECT identifier FROM banned WHERE identifier = $1 AND guild = $2"
+	row := d.db.QueryRow(s, id[:], guild)
 	var tmp []byte
 	err := row.Scan(&tmp)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -185,7 +192,6 @@ func truncateDomain(domain string) []byte {
 }
 
 func (d *DB) MakeConfig(guild discord.GuildID, domain string, role discord.RoleID) error {
-	log.Println("calling makeconfig")
 	domainBytes := truncateDomain(domain)
 	s := "INSERT INTO config (guild, email_domain, verification_role) VALUES ($1,$2,$3)"
 	_, err := d.db.Exec(s, guild, domainBytes, role)
@@ -193,7 +199,6 @@ func (d *DB) MakeConfig(guild discord.GuildID, domain string, role discord.RoleI
 }
 
 func (d *DB) UpdateConfig(guild discord.GuildID, domain string, role discord.RoleID) error {
-	log.Println("calling updateconfig with", domain)
 	domainBytes := truncateDomain(domain)
 	s := "UPDATE config SET email_domain = $1, verification_role = $2 WHERE guild = $3"
 	_, err := d.db.Exec(s, domainBytes, role, guild)
