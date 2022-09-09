@@ -26,11 +26,12 @@ func Register(s *state.State, editResponse func(string) error, user discord.User
 	if err != nil {
 		return "", fmt.Errorf("failed making an identifier from the email: %w", err)
 	}
+
+	// skip registration if account should already be verified
 	userID, ok, err := db.GetVerifiedEmail(guild, hashedEmail)
 	if err != nil {
 		return "", fmt.Errorf("error getting user ID from DB during registration: %w", err)
 	}
-
 	if ok && userID == user {
 		ok, err := addVerifiedRole(s, guild, user)
 		if err != nil {
@@ -41,9 +42,8 @@ func Register(s *state.State, editResponse func(string) error, user discord.User
 		return "Welcome back, you have been verified", err
 	}
 
-	// create token
+	// create random token
 	token := MakeToken()
-
 	err = db.SetEmailToken(guild, hashedEmail, token)
 	if err != nil {
 		return "", fmt.Errorf("error setting token in DB: %v", err)
@@ -90,6 +90,7 @@ func Verify(s *state.State, user discord.UserID, guild discord.GuildID, tokenStr
 		return "", fmt.Errorf("error unmarshalling token: %w", err)
 	}
 
+	// message may have multiple lines so we use a string builder
 	msg := &strings.Builder{}
 
 	email, ok, err := db.GetEmailToken(guild, token)
@@ -140,8 +141,6 @@ func Verify(s *state.State, user discord.UserID, guild discord.GuildID, tokenStr
 		return "You need to configure the verified role first, ask your admins to set it up.", err
 	}
 
-	msg.WriteString("Congrats! You've been verified!\n")
-
 	err = db.DeleteEmailToken(guild, token)
 	if err != nil {
 		return "", fmt.Errorf("error deleting token in DB: %w", err)
@@ -150,6 +149,8 @@ func Verify(s *state.State, user discord.UserID, guild discord.GuildID, tokenStr
 	if err != nil {
 		return "", fmt.Errorf("error verifying user in DB: %w", err)
 	}
+
+	msg.WriteString("Congrats! You've been verified!\n")
 
 	return strings.TrimSpace(msg.String()), nil
 }
