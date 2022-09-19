@@ -18,5 +18,7 @@ COPY --from=builder /app/main .
 
 ENV DISCORD_TOKEN=""
 ENV APP_ID=""
+ENV GMAIL_EMAIL=""
+ENV GMAIL_PASSWORD=""
 
 CMD ["./main"]
