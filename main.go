@@ -59,7 +59,6 @@ func main() {
 	// setup cleanup channel for ctrl+c
 	// closing this unblocks
 	cleanup := make(chan struct{})
-	cleanupTokens := make(chan struct{})
 	// make this so all background goroutines can finish cleaning up
 	cleanupWaitGroup := &sync.WaitGroup{}
 
@@ -68,7 +67,6 @@ func main() {
 		signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 		<-sig
 		close(cleanup)
-		close(cleanupTokens)
 	}()
 
 	// setup ticker for cleaning tokens
@@ -77,7 +75,7 @@ func main() {
 	go func() {
 		for {
 			select {
-			case <-cleanupTokens:
+			case <-cleanup:
 				db.CleanupTokens()
 				cleanupWaitGroup.Done()
 				return
@@ -91,6 +89,7 @@ func main() {
 	log.Println("bot is running")
 	<-cleanup
 	log.Println("cleaning up")
+	ticker.Stop()
 
 	// cleanupWaitGroup.Add(1)
 	// go func() {
