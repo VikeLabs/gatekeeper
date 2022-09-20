@@ -243,3 +243,10 @@ func (d *DB) VerificationRole(guild discord.GuildID) (discord.RoleID, bool, erro
 	}
 	return role, true, nil
 }
+
+// Cleanup removes all tokens that are older than 5 minutes.
+func (d *DB) CleanupTokens() error {
+	s := "DELETE FROM tokens WHERE created_at < NOW() - INTERVAL '5 minutes'"
+	_, err := d.db.Exec(s)
+	return err
+}

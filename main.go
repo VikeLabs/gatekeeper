@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/diamondburned/arikawa/v3/api"
 	"github.com/diamondburned/arikawa/v3/discord"
@@ -58,6 +59,9 @@ func main() {
 	// setup cleanup channel for ctrl+c
 	// closing this unblocks
 	cleanup := make(chan struct{})
+	// make this so all background goroutines can finish cleaning up
+	cleanupWaitGroup := &sync.WaitGroup{}
+
 	go func() {
 		sig := make(chan os.Signal, 1)
 		signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
@@ -65,13 +69,27 @@ func main() {
 		close(cleanup)
 	}()
 
-	// make this so all background goroutines can finish cleaning up
-	cleanupWaitGroup := &sync.WaitGroup{}
+	// setup ticker for cleaning tokens
+	ticker := time.NewTicker(5 * time.Minute)
+	cleanupWaitGroup.Add(1)
+	go func() {
+		for {
+			select {
+			case <-cleanup:
+				db.CleanupTokens()
+				cleanupWaitGroup.Done()
+				return
+			case <-ticker.C:
+				db.CleanupTokens()
+			}
+		}
+	}()
 
 	// block until ctrl+c or kill
 	log.Println("bot is running")
 	<-cleanup
 	log.Println("cleaning up")
+	ticker.Stop()
 
 	// cleanupWaitGroup.Add(1)
 	// go func() {
