@@ -91,7 +91,11 @@ func InitDB() (DB, error) {
 // Postgres compatibility
 
 func (d *DB) GetEmailToken(guild discord.GuildID, token Token) (Identifier, discord.RoleID, bool, error) {
-	s := "SELECT identifier, verification_role FROM token WHERE token = $1 AND guild = $2"
+	s := `
+		SELECT identifier, verification_role FROM token 
+		INNER JOIN config ON token.guild = config.guild AND token.email_domain = config.email_domain
+		WHERE token = $1 AND token.guild = $2
+	`
 	row := d.db.QueryRow(s, token[:], DBSnowflake(guild))
 
 	var idBuf []byte
@@ -112,9 +116,9 @@ func (d *DB) GetEmailToken(guild discord.GuildID, token Token) (Identifier, disc
 	return id, discord.RoleID(snowflake), true, nil
 }
 
-func (d *DB) SetEmailToken(guild discord.GuildID, id Identifier, token Token, role discord.RoleID) error {
-	s := "INSERT INTO token (guild, token, identifier, verification_role) VALUES ($1,$2,$3,$4)"
-	_, err := d.db.Exec(s, guild, token[:], id[:], DBSnowflake(role))
+func (d *DB) SetEmailToken(guild discord.GuildID, id Identifier, token Token, domain string) error {
+	s := "INSERT INTO token (guild, token, identifier, email_domain) VALUES ($1,$2,$3,$4)"
+	_, err := d.db.Exec(s, guild, token[:], id[:], domain)
 	return err
 }
 

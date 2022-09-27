@@ -51,7 +51,7 @@ func Register(s *state.State, editResponse func(string) error, user discord.User
 
 	// create random token
 	token := MakeToken()
-	err = db.SetEmailToken(guild, id, token, role)
+	err = db.SetEmailToken(guild, id, token, domain)
 	if err != nil {
 		return "", fmt.Errorf("error setting token in DB: %v", err)
 	}

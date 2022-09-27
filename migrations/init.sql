@@ -16,8 +16,9 @@ CREATE TABLE token (
 	guild BIGINT NOT NULL,
 	token BINARY(8) NOT NULL,
 	identifier BINARY(32) NOT NULL,
-	verification_role BIGINT NOT NULL,
+	email_domain VARCHAR(255) NOT NULL,
 	created_at DATE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (guild, email_domain) REFERENCES config (guild, email_domain),
 	PRIMARY KEY (guild, token)
 );
 
