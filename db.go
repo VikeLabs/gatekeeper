@@ -3,12 +3,15 @@ package main
 import (
 	"crypto/rand"
 	"database/sql"
+	"database/sql/driver"
 	"encoding"
 	"encoding/base32"
 	"errors"
 	"fmt"
+	"unsafe"
 
 	"github.com/diamondburned/arikawa/v3/discord"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 // DONE move each function to SQLite
@@ -41,6 +44,25 @@ func (t *Token) UnmarshalText(text []byte) error {
 		return fmt.Errorf("token text should be %v bytes; got %v", len(t), n)
 	}
 	return err
+}
+
+type DBSnowflake discord.Snowflake
+
+var _ sql.Scanner = (*DBSnowflake)(new(discord.Snowflake))
+
+func (s *DBSnowflake) Scan(src any) error {
+	intValue, ok := src.(int64)
+	if !ok {
+		return errors.New("expected int64 type")
+	}
+	*s = DBSnowflake(*(*uint64)(unsafe.Pointer(&intValue)))
+	return nil
+}
+
+var _ driver.Valuer = DBSnowflake(0)
+
+func (s DBSnowflake) Value() (driver.Value, error) {
+	return *(*int64)(unsafe.Pointer(&s)), nil
 }
 
 var db DB
