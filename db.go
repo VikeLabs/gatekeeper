@@ -90,45 +90,45 @@ func InitDB() (DB, error) {
 // the same as "$1, $2". I think this is SQLite behaviour, but keep it for
 // Postgres compatibility
 
-func (d *DB) GetEmailToken(guild discord.GuildID, token Token) (Identifier, bool, error) {
-	s := "SELECT identifier FROM token WHERE token = $1 AND guild = $2"
-	row := d.db.QueryRow(s, token[:], guild)
+func (d *DB) GetEmailToken(guild discord.GuildID, token Token) (Identifier, discord.RoleID, bool, error) {
+	s := "SELECT identifier, verification_role FROM token WHERE token = $1 AND guild = $2"
+	row := d.db.QueryRow(s, token[:], DBSnowflake(guild))
 
 	var idBuf []byte
-	err := row.Scan(&idBuf)
+	var snowflake DBSnowflake
+	err := row.Scan(&idBuf, &snowflake)
 	if errors.Is(err, sql.ErrNoRows) {
-		return Identifier{}, false, nil
+		return Identifier{}, discord.NullRoleID, false, nil
 	}
 	if err != nil {
-		return Identifier{}, false, err
+		return Identifier{}, discord.NullRoleID, false, err
 	}
 
 	var id Identifier
 	_, err = id.Write(idBuf)
 	if err != nil {
-		return Identifier{}, false, err
+		return Identifier{}, discord.NullRoleID, false, err
 	}
-
-	return id, true, nil
+	return id, discord.RoleID(snowflake), true, nil
 }
 
-func (d *DB) SetEmailToken(guild discord.GuildID, email Identifier, token Token) error {
-	s := "INSERT INTO token (guild, token, identifier) VALUES ($1,$2,$3)"
-	_, err := d.db.Exec(s, guild, token[:], email[:])
+func (d *DB) SetEmailToken(guild discord.GuildID, id Identifier, token Token, role discord.RoleID) error {
+	s := "INSERT INTO token (guild, token, identifier, verification_role) VALUES ($1,$2,$3,$4)"
+	_, err := d.db.Exec(s, guild, token[:], id[:], DBSnowflake(role))
 	return err
 }
 
 func (d *DB) DeleteEmailToken(guild discord.GuildID, token Token) error {
 	s := "DELETE FROM token WHERE token = $1 AND guild = $2"
-	_, err := d.db.Exec(s, token[:], guild)
+	_, err := d.db.Exec(s, token[:], DBSnowflake(guild))
 	return err
 }
 
 func (d *DB) GetVerifiedEmail(guild discord.GuildID, id Identifier) (discord.UserID, bool, error) {
 	s := "SELECT user FROM verified WHERE identifier = $1 AND guild = $2"
-	row := d.db.QueryRow(s, id[:], guild)
+	row := d.db.QueryRow(s, id[:], DBSnowflake(guild))
+	var user DBSnowflake
 
-	var user discord.UserID
 	err := row.Scan(&user)
 	if errors.Is(err, sql.ErrNoRows) {
 		return discord.NullUserID, false, nil
@@ -137,64 +137,62 @@ func (d *DB) GetVerifiedEmail(guild discord.GuildID, id Identifier) (discord.Use
 		return discord.NullUserID, false, err
 	}
 
-	return user, true, nil
+	return discord.UserID(user), true, nil
 }
 
-func (d *DB) SetVerifiedEmail(guild discord.GuildID, id Identifier, user discord.UserID) error {
-	s := "INSERT INTO verified (guild, identifier, user) VALUES ($1,$2,$3)"
-	_, err := d.db.Exec(s, guild, id[:], user)
+func (d *DB) SetVerifiedEmail(guild discord.GuildID, id Identifier, user discord.UserID, role discord.RoleID) error {
+	s := "INSERT INTO verified (guild, identifier, user, verification_role) VALUES ($1,$2,$3,$4)"
+	_, err := d.db.Exec(s, guild, id[:], DBSnowflake(user), DBSnowflake(role))
 	return err
 }
 
 func (d *DB) DeleteVerifiedEmail(guild discord.GuildID, id Identifier) error {
 	s := "DELETE FROM verified WHERE identifier = $1 AND guild = $2"
-	_, err := d.db.Exec(s, id[:], guild)
+	_, err := d.db.Exec(s, id[:], DBSnowflake(guild))
 	return err
 }
 
-func (d *DB) DeleteVerifiedUser(guild discord.GuildID, user discord.UserID) error {
-	s := "DELETE FROM verified WHERE user = $1 AND guild = $2"
-	_, err := d.db.Exec(s, user, guild)
-	return err
-}
-
-func (d *DB) GetUserEmail(guild discord.GuildID, user discord.UserID) (Identifier, bool, error) {
+func (d *DB) GetUserIdentifiers(guild discord.GuildID, user discord.UserID) ([]Identifier, error) {
 	s := "SELECT identifier FROM verified WHERE user = $1 AND guild = $2"
-	row := d.db.QueryRow(s, user, guild)
-
-	var idBuf []byte
-	err := row.Scan(&idBuf)
-	if errors.Is(err, sql.ErrNoRows) {
-		return Identifier{}, false, nil
-	}
+	rows, err := d.db.Query(s, DBSnowflake(user), DBSnowflake(guild))
 	if err != nil {
-		return Identifier{}, false, err
+		return nil, err
 	}
+	defer rows.Close()
 
-	var id Identifier
-	_, err = id.Write(idBuf)
-	if err != nil {
-		return Identifier{}, false, err
+	var ids []Identifier
+	for rows.Next() {
+		var idBuf []byte
+		err = rows.Scan(&idBuf)
+		if err != nil {
+			return nil, err
+		}
+
+		var id Identifier
+		_, err = id.Write(idBuf)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
 	}
-
-	return id, true, err
+	return ids, nil
 }
 
 func (d *DB) BanEmail(guild discord.GuildID, id Identifier) error {
 	s := "INSERT INTO banned (guild, identifier) VALUES ($1,$2)"
-	_, err := d.db.Exec(s, guild, id[:])
+	_, err := d.db.Exec(s, DBSnowflake(guild), id[:])
 	return err
 }
 
 func (d *DB) UnbanEmail(guild discord.GuildID, id Identifier) error {
 	s := "DELETE FROM banned WHERE identifier = $1 AND guild = $2"
-	_, err := d.db.Exec(s, id[:], guild)
+	_, err := d.db.Exec(s, id[:], DBSnowflake(guild))
 	return err
 }
 
 func (d *DB) IsBanned(guild discord.GuildID, id Identifier) (bool, error) {
 	s := "SELECT identifier FROM banned WHERE identifier = $1 AND guild = $2"
-	row := d.db.QueryRow(s, id[:], guild)
+	row := d.db.QueryRow(s, id[:], DBSnowflake(guild))
 	var tmp []byte
 	err := row.Scan(&tmp)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -205,44 +203,49 @@ func (d *DB) IsBanned(guild discord.GuildID, id Identifier) (bool, error) {
 	return true, nil
 }
 
-func truncateDomain(domain string) []byte {
-	domainBytes := []byte(domain)
-	if len(domainBytes) > 255 {
-		domainBytes = domainBytes[:255]
+func truncateDomain(domain string) string {
+	domainRunes := []rune(domain)
+	if len(domainRunes) > 255 {
+		domainRunes = domainRunes[:255]
 	}
-	return domainBytes
-}
-
-func (d *DB) MakeConfig(guild discord.GuildID, domain string, role discord.RoleID) error {
-	domainBytes := truncateDomain(domain)
-	s := "INSERT INTO config (guild, email_domain, verification_role) VALUES ($1,$2,$3)"
-	_, err := d.db.Exec(s, guild, domainBytes, role)
-	return err
+	return string(domainRunes)
 }
 
 func (d *DB) UpdateConfig(guild discord.GuildID, domain string, role discord.RoleID) error {
-	domainBytes := truncateDomain(domain)
-	s := "UPDATE config SET email_domain = $1, verification_role = $2 WHERE guild = $3"
-	_, err := d.db.Exec(s, domainBytes, role, guild)
+	truncDomain := truncateDomain(domain)
+	s := `
+		INSERT INTO config (guild, email_domain, verification_role) VALUES ($1,$2,$3)
+		ON CONFLICT (guild,email_domain) DO UPDATE 
+		SET email_domain = $2,
+			verification_role = $3
+	`
+	_, err := d.db.Exec(s, DBSnowflake(guild), truncDomain, DBSnowflake(role))
 	return err
 }
 
-func (d *DB) HasConfig(guild discord.GuildID) (bool, error) {
-	s := "SELECT guild FROM config WHERE guild = $1"
-	row := d.db.QueryRow(s, guild)
-	var tmp discord.GuildID
-	err := row.Scan(&tmp)
+func (d *DB) DeleteConfig(guild discord.GuildID, domain string) error {
+	s := "DELETE FROM config WHERE guild = $1 AND email_domain = $2"
+	_, err := d.db.Exec(s, DBSnowflake(guild), domain)
+	return err
+}
+
+func (d *DB) GetConfig(guild discord.GuildID, domain string) (discord.RoleID, bool, error) {
+	s := "SELECT verification_role FROM config WHERE guild = $1 AND email_domain = $2"
+	row := d.db.QueryRow(s, DBSnowflake(guild), domain)
+	var role DBSnowflake
+	err := row.Scan(&role)
 	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	} else if err != nil {
-		return false, err
+		return discord.NullRoleID, false, nil
 	}
-	return true, nil
+	if err != nil {
+		return discord.NullRoleID, false, err
+	}
+	return discord.RoleID(role), true, nil
 }
 
 func (d *DB) EmailDomain(guild discord.GuildID) (string, bool, error) {
 	s := "SELECT email_domain FROM config WHERE guild = $1"
-	row := d.db.QueryRow(s, guild)
+	row := d.db.QueryRow(s, DBSnowflake(guild))
 	var domain []byte
 	err := row.Scan(&domain)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -253,17 +256,17 @@ func (d *DB) EmailDomain(guild discord.GuildID) (string, bool, error) {
 	return string(domain), true, nil
 }
 
-func (d *DB) VerificationRole(guild discord.GuildID) (discord.RoleID, bool, error) {
-	s := "SELECT verification_role FROM config WHERE guild = $1"
-	row := d.db.QueryRow(s, guild)
-	var role discord.RoleID
+func (d *DB) VerificationRole(guild discord.GuildID, id Identifier) (discord.RoleID, bool, error) {
+	s := "SELECT verification_role FROM verified WHERE guild = $1 AND identifier = $2"
+	row := d.db.QueryRow(s, DBSnowflake(guild), id[:])
+	var role DBSnowflake
 	err := row.Scan(&role)
 	if errors.Is(err, sql.ErrNoRows) {
 		return discord.NullRoleID, false, nil
 	} else if err != nil {
 		return discord.NullRoleID, false, err
 	}
-	return role, true, nil
+	return discord.RoleID(role), true, nil
 }
 
 // Cleanup removes all tokens that are older than 5 minutes.
