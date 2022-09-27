@@ -50,3 +50,17 @@ func validateEmail(domain, email string) error {
 
 	return nil
 }
+
+func extractDomain(email string) (string, error) {
+	address, err := mail.ParseAddress(email)
+	if err != nil {
+		return "", fmt.Errorf("email address format is invalid")
+	}
+
+	parts := strings.Split(address.Address, "@")
+	if len(parts) != 2 {
+		return "", fmt.Errorf("email address format is invalid")
+	}
+
+	return parts[1], nil
+}
