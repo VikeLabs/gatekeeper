@@ -17,12 +17,10 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 
 # Download the static build of Litestream directly into the path & make it executable.
 # This is done in the builder and copied as the chmod doubles the size.
-RUN \
-    if [ "$(uname -m)" = "x86_64" ]; then \
-    curl -sSL https://github.com/benbjohnson/litestream/releases/download/v0.3.9/litestream-v0.3.9-linux-arm64-static.tar.gz /tmp/litestream.tar.gz \
-    else \
-    curl -sSL https://github.com/benbjohnson/litestream/releases/download/v0.3.9/litestream-v0.3.9-linux-amd64-static.tar.gz /tmp/litestream.tar.gz \
-    fi
+ARG ARCHITECTURE=amd64
+ARG TARGETPLATFORM
+RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then ARCHITECTURE=amd64; elif [ "$TARGETPLATFORM" = "linux/arm/v7" ]; then ARCHITECTURE=arm; elif [ "$TARGETPLATFORM" = "linux/arm64" ]; then ARCHITECTURE=aarch64; else ARCHITECTURE=amd64; fi
+ADD "https://github.com/benbjohnson/litestream/releases/download/v0.3.9/litestream-v0.3.9-linux-$ARCHITECTURE-static.tar.gz" "/tmp/litestream.tar.gz"
 RUN tar -C /usr/local/bin -xzf /tmp/litestream.tar.gz
 
 # This starts our final image; based on alpine to make it small.
@@ -49,4 +47,3 @@ COPY scripts/run.sh /scripts/run.sh
 # make the script executable
 RUN chmod +x /scripts/run.sh
 CMD [ "/scripts/run.sh" ]
-
