@@ -25,6 +25,16 @@ var pingHandler = func(s *state.State, e *gateway.InteractionCreateEvent, option
 	return makeEphemeralResponse(response)
 }
 
+var permissionRequireAdministrator = func() *discord.Permissions {
+	v := discord.PermissionAdministrator
+	return &v
+}
+
+var permissionRequireBanMembers = func() *discord.Permissions {
+	v := discord.PermissionBanMembers
+	return &v
+}
+
 var commandsGlobal = []Command{
 	{
 		Data: api.CreateCommandData{
@@ -114,9 +124,10 @@ var commandsGlobal = []Command{
 
 	{
 		Data: api.CreateCommandData{
-			Name:        "ban",
-			Description: "Unverify a user and block their email from verifying",
-			Type:        discord.ChatInputCommand,
+			Name:                     "ban",
+			Description:              "Unverify a user and block their email from verifying",
+			Type:                     discord.ChatInputCommand,
+			DefaultMemberPermissions: permissionRequireBanMembers(),
 			Options: []discord.CommandOption{
 				&discord.UserOption{
 					OptionName:  "user",
@@ -142,9 +153,10 @@ var commandsGlobal = []Command{
 	},
 	{
 		Data: api.CreateCommandData{
-			Name:        "config",
-			Description: "Configure the verification channel and role",
-			Type:        discord.ChatInputCommand,
+			Name:                     "config",
+			Description:              "Configure the verification channel and role",
+			Type:                     discord.ChatInputCommand,
+			DefaultMemberPermissions: permissionRequireAdministrator(),
 			Options: []discord.CommandOption{
 				&discord.StringOption{
 					OptionName:  "domain",

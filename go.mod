@@ -3,7 +3,7 @@ module gatekeeper
 go 1.19
 
 require (
-	github.com/diamondburned/arikawa/v3 v3.0.0-rc.6
+	github.com/diamondburned/arikawa/v3 v3.0.0
 	github.com/mattn/go-sqlite3 v1.14.13
 	golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
