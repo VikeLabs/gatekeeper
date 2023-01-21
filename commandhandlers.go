@@ -75,9 +75,9 @@ var commandsGlobal = []Command{
 			msg, err := Register(s, editResponse, e.SenderID(), e.GuildID, strings.TrimSpace(strings.ToLower(email.String())))
 			if err != nil {
 				log.Println("registration error:", err)
-				return errorResponse
-			}
 			return makeEphemeralResponse(msg)
+			}
+			return errorResponse
 		},
 	},
 
@@ -105,9 +105,9 @@ var commandsGlobal = []Command{
 			msg, err := Verify(s, e.SenderID(), e.GuildID, strings.TrimSpace(token.String()))
 			if err != nil {
 				log.Println("verification error:", err)
-				return errorResponse
-			}
 			return makeEphemeralResponse(msg)
+			}
+			return errorResponse
 		},
 	},
 
@@ -134,9 +134,9 @@ var commandsGlobal = []Command{
 			msg, err := Ban(s, discord.UserID(user), e.GuildID)
 			if err != nil {
 				log.Println("ban error:", err)
-				return errorResponse
-			}
 			return makeEphemeralResponse(msg)
+			}
+			return errorResponse
 		},
 	},
 	{
@@ -167,9 +167,9 @@ var commandsGlobal = []Command{
 			msg, err := Config(s, e.GuildID, domain, discord.RoleID(role))
 			if err != nil {
 				log.Println("ban error:", err)
-				return errorResponse
-			}
 			return makeEphemeralResponse(msg)
+			}
+			return errorResponse
 		},
 	},
 
