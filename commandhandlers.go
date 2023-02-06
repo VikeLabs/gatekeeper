@@ -25,14 +25,8 @@ var pingHandler = func(s *state.State, e *gateway.InteractionCreateEvent, option
 	return makeEphemeralResponse(response)
 }
 
-var permissionRequireAdministrator = func() *discord.Permissions {
-	v := discord.PermissionAdministrator
-	return &v
-}
-
-var permissionRequireBanMembers = func() *discord.Permissions {
-	v := discord.PermissionBanMembers
-	return &v
+func ConstRef[E any](e E) *E {
+    return &e
 }
 
 var commandsGlobal = []Command{
@@ -83,7 +77,6 @@ var commandsGlobal = []Command{
 
 			// lowercase the email, trim whitespace
 			msg, err := Register(s, editResponse, e.SenderID(), e.GuildID, strings.TrimSpace(strings.ToLower(email.String())))
-			log.Println("msg: ", msg, "err:", err)
 			if err != nil {
 				log.Println("registration error:", err)
 				// user-facing error and success is handled in Register()'s defer func()
@@ -127,7 +120,7 @@ var commandsGlobal = []Command{
 			Name:                     "ban",
 			Description:              "Unverify a user and block their email from verifying",
 			Type:                     discord.ChatInputCommand,
-			DefaultMemberPermissions: permissionRequireBanMembers(),
+			DefaultMemberPermissions: ConstRef(discord.PermissionBanMembers),
 			Options: []discord.CommandOption{
 				&discord.UserOption{
 					OptionName:  "user",
@@ -156,7 +149,7 @@ var commandsGlobal = []Command{
 			Name:                     "config",
 			Description:              "Configure the verification channel and role",
 			Type:                     discord.ChatInputCommand,
-			DefaultMemberPermissions: permissionRequireAdministrator(),
+			DefaultMemberPermissions: ConstRef(discord.PermissionAdministrator),
 			Options: []discord.CommandOption{
 				&discord.StringOption{
 					OptionName:  "domain",
