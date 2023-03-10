@@ -1,4 +1,4 @@
-FROM golang:1.15.6-alpine as builder
+FROM golang:1.19-alpine AS builder
 LABEL maintainer="VikeLabs <gatekeeper@vikelabs.ca>"
 
 WORKDIR /app
@@ -16,6 +16,9 @@ WORKDIR /root/
 # Copy the Pre-built binary file from the build stage
 COPY --from=builder /app/main .
 
-ENV BOT_TOKEN=""
+ENV DISCORD_TOKEN=""
+ENV APP_ID=""
+ENV GMAIL_EMAIL=""
+ENV GMAIL_PASSWORD=""
 
 CMD ["./main"]
